@@ -14,7 +14,6 @@ export async function getStockProductsByPartner(partnerId: string) {
     .order('products(product_code)')
   
   return data?.map(d => {
-    // ★修正: 型エラー回避のため as any でキャスト
     const p = d.products as any
     return {
       id: p.id,
@@ -52,9 +51,7 @@ export async function getRawStockProductsByPartner(partnerId: string) {
 
   // 3. 結合
   return stockData.map(item => {
-    // ★修正: 型エラー回避
     const p = item.products as any
-
     const arrivals = movements
       ?.filter(m => m.product_id === item.product_id)
       .slice(0, 5) // 直近5件まで
@@ -94,7 +91,6 @@ export async function getDefectiveProductsByPartner(partnerId: string) {
 
   // 2. 履歴取得
   const productIds = stockData.map(d => d.product_id)
-  
   const { data: movements } = await supabase
     .from('inventory_movements')
     .select('product_id, movement_type, quantity_change, defect_reason, created_at, due_date')
@@ -104,12 +100,9 @@ export async function getDefectiveProductsByPartner(partnerId: string) {
 
   // 3. データ結合
   return stockData.map(item => {
-    // ★修正: 型エラー回避
     const p = item.products as any
-
     const pLogs = movements?.filter(m => m.product_id === item.product_id) || []
 
-    // A. 不良履歴
     const defectLogs = pLogs.filter(m => 
       m.defect_reason !== null || 
       ['production_defective', 'defect_found'].includes(m.movement_type)
@@ -118,7 +111,6 @@ export async function getDefectiveProductsByPartner(partnerId: string) {
       date: new Date(l.created_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
     }))
 
-    // B. 入荷履歴
     const arrivalLogs = pLogs
       .filter(m => m.movement_type === 'receiving')
       .slice(0, 3)
@@ -184,7 +176,6 @@ export async function registerProduction(data: {
 
   try {
     const sourceMemo = data.sourceDate ? ` (入荷日: ${data.sourceDate})` : ''
-
     if (data.rawUsed > 0) {
       await supabase.rpc('increment_stock', { p_product_id: data.productId, p_amount: -data.rawUsed, p_field: 'stock_raw' })
       await supabase.from('inventory_movements').insert({
@@ -371,7 +362,7 @@ export async function getGlobalHistory() {
   return data || []
 }
 
-// 一括削除（在庫戻し）
+// 一括削除
 export async function bulkDeleteMovements(ids: string[]) {
   let successCount = 0
   let errorCount = 0
@@ -387,14 +378,8 @@ export async function bulkDeleteMovements(ids: string[]) {
 // 履歴完全削除（物理削除）
 export async function purgeMovements(ids: string[]) {
   const supabase = await createClient()
-  const { error } = await supabase
-    .from('inventory_movements')
-    .delete()
-    .in('id', ids)
-
-  if (error) {
-    return { success: false, message: '削除エラー: ' + error.message }
-  }
+  const { error } = await supabase.from('inventory_movements').delete().in('id', ids)
+  if (error) return { success: false, message: '削除エラー: ' + error.message }
   revalidatePath('/inventory')
   return { success: true, message: `${ids.length}件の履歴を完全に削除しました` }
 }
@@ -402,29 +387,18 @@ export async function purgeMovements(ids: string[]) {
 // 納品書データの取得 (印刷用)
 export async function getShipmentForPrint(shipmentId: string) {
   const supabase = await createClient()
-  
-  // 1. ヘッダーと取引先
   const { data: shipment } = await supabase
     .from('shipments')
-    .select(`
-      *,
-      partners ( name, address, phone )
-    `)
+    .select(`*, partners ( name, address, phone )`)
     .eq('id', shipmentId)
     .single()
   
   if (!shipment) return null
-
-  // 2. 明細と製品情報
   const { data: items } = await supabase
     .from('shipment_items')
-    .select(`
-      *,
-      products ( name, product_code, color, unit_weight )
-    `)
+    .select(`*, products ( name, product_code, color, unit_weight )`)
     .eq('shipment_id', shipmentId)
     .order('products(product_code)')
-
   return { ...shipment, items: items || [] }
 }
 
@@ -436,11 +410,7 @@ export async function getRecentShipments(partnerId?: string) {
     .select('id, shipment_date, total_amount, partners(name), created_at')
     .order('created_at', { ascending: false })
     .limit(10)
-
-  if (partnerId) {
-    query = query.eq('partner_id', partnerId)
-  }
-
+  if (partnerId) query = query.eq('partner_id', partnerId)
   const { data } = await query
   return data || []
 }
@@ -450,40 +420,24 @@ export async function getShipmentList() {
   const supabase = await createClient()
   const { data } = await supabase
     .from('shipments')
-    .select(`
-      *,
-      partners ( name )
-    `)
+    .select(`*, partners ( name )`)
     .order('shipment_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(100)
-
   return data || []
 }
 
-// 納品書の取り消し (削除)
+// 納品書の取り消し
 export async function deleteShipment(shipmentId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, message: '要ログイン' }
-
-  const { data: shipment } = await supabase
-    .from('shipments')
-    .select('*, shipment_items(*)')
-    .eq('id', shipmentId)
-    .single()
-
+  const { data: shipment } = await supabase.from('shipments').select('*, shipment_items(*)').eq('id', shipmentId).single()
   if (!shipment) return { success: false, message: 'データが見つかりません' }
 
   try {
-    // 2. 在庫を戻す
     for (const item of shipment.shipment_items) {
-      await supabase.rpc('increment_stock', { 
-        p_product_id: item.product_id, 
-        p_amount: item.quantity, 
-        p_field: 'stock_finished' 
-      })
-
+      await supabase.rpc('increment_stock', { p_product_id: item.product_id, p_amount: item.quantity, p_field: 'stock_finished' })
       await supabase.from('inventory_movements').insert({
         product_id: item.product_id,
         movement_type: 'shipping_cancel',
@@ -492,21 +446,105 @@ export async function deleteShipment(shipmentId: string) {
         created_by: user.id
       })
     }
-
-    // 3. 納品書データを削除
     const { error } = await supabase.from('shipments').delete().eq('id', shipmentId)
     if (error) throw error
-
     revalidatePath('/inventory')
     revalidatePath('/shipments')
-    return { success: true, message: '納品書を取り消しました（在庫を戻しました）' }
+    return { success: true, message: '納品書を取り消しました' }
   } catch (e: any) {
     return { success: false, message: '削除エラー: ' + e.message }
   }
 }
-// ... (既存のコードの末尾に追加)
 
-// ★追加: 全在庫データの取得 (在庫一覧用)
+// 請求書作成候補の検索
+export type InvoiceCandidate = { partner: { id: string, name: string }, shipment_count: number, total_amount_excl_tax: number }
+export async function getUnbilledSummary(closingDate: number, startDate: string, endDate: string) {
+  const supabase = await createClient()
+  const { data: shipments } = await supabase
+    .from('shipments')
+    .select(`total_amount, partners!inner ( id, name, closing_date )`)
+    .is('invoice_id', null)
+    .eq('partners.closing_date', closingDate)
+    .gte('shipment_date', startDate)
+    .lte('shipment_date', endDate)
+  if (!shipments) return []
+  const summaryMap = new Map<string, InvoiceCandidate>()
+  shipments.forEach(s => {
+    const pId = s.partners.id
+    if (!summaryMap.has(pId)) summaryMap.set(pId, { partner: { id: pId, name: s.partners.name }, shipment_count: 0, total_amount_excl_tax: 0 })
+    const current = summaryMap.get(pId)!
+    current.shipment_count += 1
+    current.total_amount_excl_tax += s.total_amount
+  })
+  return Array.from(summaryMap.values())
+}
+
+// 未請求出荷データ（詳細）取得
+export async function getUnbilledShipments(partnerId: string, startDate: string, endDate: string) {
+  const supabase = await createClient()
+  const { data: shipments } = await supabase
+    .from('shipments')
+    .select(`
+      id, shipment_date, delivery_note_number, total_amount,
+      shipment_items ( id, quantity, unit_price, line_total, products ( name, product_code, color ) ),
+      partners ( name )
+    `)
+    .eq('partner_id', partnerId)
+    .is('invoice_id', null)
+    .gte('shipment_date', startDate)
+    .lte('shipment_date', endDate)
+    .order('shipment_date', { ascending: true })
+  return shipments || []
+}
+
+// 請求書作成（確定）
+export async function createSingleInvoice(partnerId: string, periodStart: string, periodEnd: string, totalExclTax: number) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, message: '要ログイン' }
+  try {
+    const subtotal = totalExclTax
+    const tax = Math.floor(subtotal * 0.1)
+    const total = subtotal + tax
+    const { data: invoice, error: invError } = await supabase
+      .from('invoices')
+      .insert({
+        partner_id: partnerId,
+        period_start: periodStart,
+        period_end: periodEnd,
+        issue_date: new Date().toISOString(),
+        subtotal: subtotal,
+        tax_amount: tax,
+        total_amount: total,
+        status: 'confirmed',
+        created_by: user.id
+      })
+      .select()
+      .single()
+    if (invError) throw invError
+    const { error: shipError } = await supabase
+      .from('shipments')
+      .update({ invoice_id: invoice.id })
+      .eq('partner_id', partnerId)
+      .is('invoice_id', null)
+      .gte('shipment_date', periodStart)
+      .lte('shipment_date', periodEnd)
+    if (shipError) throw shipError
+    revalidatePath('/invoices')
+    return { success: true, message: '請求書を作成しました' }
+  } catch (e: any) {
+    return { success: false, message: '作成エラー: ' + e.message }
+  }
+}
+
+// 請求書一覧取得
+export async function getInvoices() {
+  const supabase = await createClient()
+  const { data } = await supabase.from('invoices').select(`*, partners ( name )`).order('created_at', { ascending: false }).limit(50)
+  return data || []
+}
+
+// ★追加: 全在庫データの取得 (修正版: 型エラー回避)
 export async function getAllInventory() {
   const supabase = await createClient()
   const { data } = await supabase
@@ -527,17 +565,23 @@ export async function getAllInventory() {
     .order('last_updated_at', { ascending: false })
   
   // フロントエンドの型に合わせる変換
-  return data?.map(d => ({
-    product_id: d.products.id,
-    stock_raw: d.stock_raw,
-    stock_finished: d.stock_finished,
-    stock_defective: d.stock_defective,
-    last_updated_at: d.last_updated_at,
-    products: {
-      name: d.products.name,
-      product_code: d.products.product_code,
-      color: d.products.color,
-      partners: d.products.partners // 取引先名用
+  return data?.map(d => {
+    // ★ここが修正ポイント: products を明示的に型変換して「配列ではない」と認識させる
+    const p = d.products as any
+    const partner = Array.isArray(p.partners) ? p.partners[0] : p.partners // 万が一パートナーが配列でも対応
+    
+    return {
+      product_id: p.id,
+      stock_raw: d.stock_raw,
+      stock_finished: d.stock_finished,
+      stock_defective: d.stock_defective,
+      last_updated_at: d.last_updated_at,
+      products: {
+        name: p.name,
+        product_code: p.product_code,
+        color: p.color,
+        partners: partner // ここに安全なオブジェクトが入る
+      }
     }
-  })) || []
+  }) || []
 }

@@ -12,8 +12,8 @@ export default async function ProductsPage(props: Props) {
   const supabase = await createClient();
 
   // --- 検索条件の取得 ---
-  const partnerName =
-    typeof searchParams.partner === 'string' ? searchParams.partner : '';
+  const partnerId =
+    typeof searchParams.partner_id === 'string' ? searchParams.partner_id : '';
   const keyword = typeof searchParams.q === 'string' ? searchParams.q : '';
   const showDiscontinued = searchParams.show_discontinued === 'true';
 
@@ -22,8 +22,8 @@ export default async function ProductsPage(props: Props) {
   let query = supabase.from('products').select('*, partners!inner(id, name)');
 
   // (A) 取引先フィルタ
-  if (partnerName) {
-    query = query.eq('partners.name', partnerName);
+  if (partnerId) {
+    query = query.eq('partner_id', partnerId);
   }
 
   // (B) 廃盤フィルタ (指定がなければ稼働のみ)

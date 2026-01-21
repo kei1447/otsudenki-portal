@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { deleteProduct } from './actions';
 import type { Product, Partner } from '@/types/models';
 
@@ -10,33 +11,49 @@ type Props = {
 };
 
 export default function ProductList({ initialProducts, masterPartners }: Props) {
-  // フィルタリング用ステート
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterPartnerId, setFilterPartnerId] = useState('');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  // 製品データ正規化
-  const normalizedProducts = initialProducts.map((p) => ({
+  // URLから初期値を取得
+  const [searchQuery, setSearchQuery] = useState(
+    searchParams.get('q')?.toString() || ''
+  );
+
+  // URL更新ヘルパー
+  const createQueryString = useCallback(
+    (name: string, value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) {
+        params.set(name, value);
+      } else {
+        params.delete(name);
+      }
+      return params.toString();
+    },
+    [searchParams]
+  );
+
+  // 検索クエリ変更 (Enterキーまたはフォーカスアウトで確定させる方がUXが良いが、簡易実装としてonChangeで更新しつつDebounce対応等は必要に応じて)
+  // 今回は簡易的に、入力欄はState管理し、確定ボタン等は置かずに少し遅延させるか、あるいはFormにするか。
+  // ここではシンプルに「入力完了」＝「フォーカスアウト or Enter」ではなく、
+  // UIの複雑さを避けるため、onChangeでState更新、useEffect等は使わず、
+  // 下記の「適用」ロジックを別途用意するか、シンプルに onChange で replace するか。
+  // ユーザー体験を考慮し、Enterキーで検索実行とします。
+
+  const handleSearch = () => {
+    router.push(pathname + '?' + createQueryString('q', searchQuery));
+  };
+
+  const handlePartnerChange = (partnerId: string) => {
+    router.push(pathname + '?' + createQueryString('partner_id', partnerId));
+  };
+
+  // サーバーサイドでフィルタ済みなので、そのまま表示
+  const filteredProducts = initialProducts.map((p) => ({
     ...p,
     partners: Array.isArray(p.partners) ? (p.partners[0] ?? null) : p.partners,
   }));
-
-  // フィルタリング処理
-  const filteredProducts = normalizedProducts.filter((p) => {
-    // 1. テキスト検索 (製品名 or コード)
-    const lowerQuery = searchQuery.toLowerCase();
-    const matchText =
-      !searchQuery ||
-      p.name.toLowerCase().includes(lowerQuery) ||
-      (p.product_code || '').toLowerCase().includes(lowerQuery);
-
-    // 2. 取引先フィルタ
-    // (p.partners は normalize されているので単一オブジェクトまたはnull)
-    const pPartner = p.partners as Partner | null;
-    const matchPartner =
-      !filterPartnerId || (pPartner && pPartner.id === filterPartnerId);
-
-    return matchText && matchPartner;
-  });
 
   const handleDelete = async (id: string | number) => {
     if (!confirm('本当に削除しますか？')) return;
@@ -50,7 +67,7 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
         <div className="flex-1">
           <label className="text-xs font-bold text-gray-500 block mb-1">
-            検索 (製品名・コード)
+            検索 (製品名・コード) - Enterで検索
           </label>
           <input
             type="text"
@@ -58,6 +75,10 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
             placeholder="キーワードを入力..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSearch();
+            }}
+            onBlur={handleSearch}
           />
         </div>
         <div>
@@ -66,8 +87,8 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
           </label>
           <select
             className="w-full sm:w-48 border p-2 rounded text-sm bg-white"
-            value={filterPartnerId}
-            onChange={(e) => setFilterPartnerId(e.target.value)}
+            value={searchParams.get('partner_id') || ''}
+            onChange={(e) => handlePartnerChange(e.target.value)}
           >
             <option value="">すべて</option>
             {masterPartners.map((mp) => (
@@ -135,7 +156,7 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
         </table>
       </div>
       <div className="text-right text-xs text-gray-400">
-        {filteredProducts.length} 件表示 / 全 {initialProducts.length} 件
+        {filteredProducts.length} 件表示 (MAX 2000件)
       </div>
     </div>
   );

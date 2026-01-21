@@ -26,7 +26,7 @@ export default function InvoiceListPage() {
           href="/invoices/create" 
           className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-500 font-bold flex items-center gap-2"
         >
-          ＋ 一括作成
+          ＋ 新規作成
         </Link>
       </div>
 
@@ -36,7 +36,7 @@ export default function InvoiceListPage() {
         ) : invoices.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
             請求書データがありません。<br/>
-            右上の「一括作成」から作成してください。
+            右上の「新規作成」から作成してください。
           </div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200">
@@ -50,20 +50,23 @@ export default function InvoiceListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {invoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-600">{new Date(inv.issue_date).toLocaleDateString()}</td>
-                  <td className="px-6 py-4 text-sm font-bold text-gray-800">{inv.partners?.name}</td>
-                  <td className="px-6 py-4 text-xs text-gray-500">
-                    {new Date(inv.period_start).toLocaleDateString()} ～ {new Date(inv.period_end).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 text-sm font-bold text-right">¥ {inv.total_amount.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="text-xs text-gray-400">PDF準備中</span>
-                    {/* ここに将来 /invoices/[id]/print へのリンクを追加 */}
-                  </td>
-                </tr>
-              ))}
+              {invoices.map((inv) => {
+                const p = inv.partners as any
+                const pName = Array.isArray(p) ? p[0]?.name : p?.name
+                return (
+                  <tr key={inv.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm text-gray-600">{new Date(inv.issue_date).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 text-sm font-bold text-gray-800">{pName || '(不明)'}</td>
+                    <td className="px-6 py-4 text-xs text-gray-500">
+                      {new Date(inv.period_start).toLocaleDateString()} ～ {new Date(inv.period_end).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-bold text-right">¥ {inv.total_amount.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="text-xs text-gray-400">PDF準備中</span>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

@@ -7,7 +7,7 @@ export async function getProducts() {
   const supabase = await createClient();
   const { data } = await supabase
     .from('products')
-    .select('*, partners(name)')
+    .select('*, partners(id, name)')
     .order('product_code');
 
   // 安全な型変換

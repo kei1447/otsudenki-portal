@@ -3,9 +3,12 @@
 import { useState } from 'react';
 import { updatePartner, deletePartner } from './actions'; // 修正: 正しい名前でインポート
 
+import { useRouter } from 'next/navigation';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function PartnerList({ partners }: { partners: any[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const router = useRouter();
 
   const handleDelete = async (id: string) => {
     if (!confirm('本当に削除しますか？')) return;
@@ -19,7 +22,10 @@ export default function PartnerList({ partners }: { partners: any[] }) {
     const formData = new FormData(e.currentTarget);
     const res = await updatePartner(editingId, formData);
     alert(res.message);
-    if (res.success) setEditingId(null);
+    if (res.success) {
+      setEditingId(null);
+      router.refresh();
+    }
   };
 
   return (

@@ -34,8 +34,10 @@ export async function createPartner(formData: FormData) {
     if (error) throw error;
     revalidatePath('/partners');
     return { success: true, message: '登録しました' };
-  } catch (e: unknown) {
-    return { success: false, message: (e instanceof Error ? e.message : 'Unknown error') };
+  } catch (e: any) {
+    console.error('createPartner error:', e);
+    const errorMsg = e.message || JSON.stringify(e) || 'Unknown error';
+    return { success: false, message: `登録失敗: ${errorMsg}` };
   }
 }
 
@@ -67,8 +69,10 @@ export async function updatePartner(id: string, formData: FormData) {
     if (error) throw error;
     revalidatePath('/partners');
     return { success: true, message: '更新しました' };
-  } catch (e: unknown) {
-    return { success: false, message: (e instanceof Error ? e.message : 'Unknown error') };
+  } catch (e: any) {
+    console.error('updatePartner error:', e);
+    const errorMsg = e.message || JSON.stringify(e) || 'Unknown error';
+    return { success: false, message: `更新失敗: ${errorMsg}` };
   }
 }
 

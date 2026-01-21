@@ -73,9 +73,10 @@ export default function PartnersPage() {
   }
 
   // 締め日表示ヘルパー
-  const getClosingLabel = (day: number) => {
-    if (day === 99) return <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">末締め</span>
-    return <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">{day}日締め</span>
+  const getClosingLabel = (day: number | null) => {
+    const value = day ?? 99
+    if (value === 99) return <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">末締め</span>
+    return <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">{value}日締め</span>
   }
 
   return (
@@ -156,7 +157,7 @@ export default function PartnersPage() {
                   <label className="block text-sm font-bold text-gray-700 mb-1">締め日設定</label>
                   <select 
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    value={formData.closing_date}
+                  value={formData.closing_date ?? 99}
                     onChange={e => setFormData({...formData, closing_date: Number(e.target.value)})}
                   >
                     <option value={99}>末締め (デフォルト)</option>

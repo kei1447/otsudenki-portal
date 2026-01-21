@@ -18,12 +18,13 @@ export async function createPartner(formData: FormData) {
   const code = formData.get('code') as string
   const address = formData.get('address') as string
   const phone = formData.get('phone') as string
+  const memo = formData.get('memo') as string
   // 締め日は数値変換。空なら99(末)
   const closingDate = Number(formData.get('closing_date') || 99)
 
   try {
     const { error } = await supabase.from('partners').insert({
-      name, code, address, phone, closing_date: closingDate
+      name, code, address, phone, memo, closing_date: closingDate
     })
     if (error) throw error
     revalidatePath('/partners')
@@ -41,11 +42,12 @@ export async function updatePartner(id: string, formData: FormData) {
   const code = formData.get('code') as string
   const address = formData.get('address') as string
   const phone = formData.get('phone') as string
+  const memo = formData.get('memo') as string
   const closingDate = Number(formData.get('closing_date') || 99)
 
   try {
     const { error } = await supabase.from('partners').update({
-      name, code, address, phone, closing_date: closingDate
+      name, code, address, phone, memo, closing_date: closingDate
     }).eq('id', id)
     
     if (error) throw error

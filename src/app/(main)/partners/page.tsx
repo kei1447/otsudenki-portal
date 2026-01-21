@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getPartners, upsertPartner, deletePartner, type Partner } from './actions'
+import { getPartners, createPartner, updatePartner, deletePartner } from './actions'
+import type { Partner } from '@/types/models'
 
 export default function PartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([])
@@ -53,7 +54,15 @@ export default function PartnersPage() {
     e.preventDefault()
     if (!formData.name) return alert('取引先名は必須です')
 
-    const res = await upsertPartner(formData)
+    const fd = new FormData()
+    fd.set('name', formData.name)
+    fd.set('code', formData.code ?? '')
+    fd.set('address', formData.address ?? '')
+    fd.set('phone', formData.phone ?? '')
+    fd.set('memo', formData.memo ?? '')
+    fd.set('closing_date', String(formData.closing_date ?? 99))
+
+    const res = formData.id ? await updatePartner(formData.id, fd) : await createPartner(fd)
     if (res.success) {
       alert(res.message)
       setIsEditing(false)

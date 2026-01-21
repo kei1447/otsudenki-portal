@@ -8,6 +8,7 @@ export type Partner = {
     address: string | null;
     phone: string | null;
     memo: string | null;
+    closing_date: number | null;
     calculation_type: string | null;
     created_at: string;
   };

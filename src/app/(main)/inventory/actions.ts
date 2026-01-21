@@ -504,3 +504,40 @@ export async function deleteShipment(shipmentId: string) {
     return { success: false, message: '削除エラー: ' + e.message }
   }
 }
+// ... (既存のコードの末尾に追加)
+
+// ★追加: 全在庫データの取得 (在庫一覧用)
+export async function getAllInventory() {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('inventory')
+    .select(`
+      stock_raw,
+      stock_finished,
+      stock_defective,
+      last_updated_at,
+      products!inner (
+        id,
+        name,
+        product_code,
+        color,
+        partners ( name )
+      )
+    `)
+    .order('last_updated_at', { ascending: false })
+  
+  // フロントエンドの型に合わせる変換
+  return data?.map(d => ({
+    product_id: d.products.id,
+    stock_raw: d.stock_raw,
+    stock_finished: d.stock_finished,
+    stock_defective: d.stock_defective,
+    last_updated_at: d.last_updated_at,
+    products: {
+      name: d.products.name,
+      product_code: d.products.product_code,
+      color: d.products.color,
+      partners: d.products.partners // 取引先名用
+    }
+  })) || []
+}

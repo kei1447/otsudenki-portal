@@ -11,27 +11,31 @@ import {
 } from './actions';
 import {
   getRawStockProductsByPartner,
+  getFinishedStockProductsByPartner,
   getDefectiveProductsByPartner,
   getRecentShipments,
   getProductsByPartner,
 } from './actions';
+import InventoryTable from './inventory-table';
 
 // 型定義
-type RawProduct = Awaited<
-  ReturnType<typeof getRawStockProductsByPartner>
->[number];
-type DefectiveProduct = Awaited<
-  ReturnType<typeof getDefectiveProductsByPartner>
->[number];
+type ReceivingProduct = Awaited<ReturnType<typeof getProductsByPartner>>[number];
+type ProductionProduct = Awaited<ReturnType<typeof getRawStockProductsByPartner>>[number];
+type ShipmentProduct = Awaited<ReturnType<typeof getFinishedStockProductsByPartner>>[number];
+type DefectiveProduct = Awaited<ReturnType<typeof getDefectiveProductsByPartner>>[number];
 
 export default function OperationPanel({
   partnerId,
-  rawProducts,
-  defectiveProducts,
+  receivingCandidates,
+  productionCandidates,
+  shipmentCandidates,
+  defectiveCandidates,
 }: {
   partnerId: string;
-  rawProducts: RawProduct[];
-  defectiveProducts: DefectiveProduct[];
+  receivingCandidates: ReceivingProduct[];
+  productionCandidates: ProductionProduct[];
+  shipmentCandidates: ShipmentProduct[];
+  defectiveCandidates: DefectiveProduct[];
 }) {
   const [activeTab, setActiveTab] = useState('receiving');
 
@@ -76,11 +80,11 @@ export default function OperationPanel({
       </div>
 
       <div className="bg-white p-6 rounded-b-lg border border-gray-200 shadow-sm min-h-[400px]">
-        {activeTab === 'receiving' && <ReceivingTab products={rawProducts} />}
-        {activeTab === 'production' && <ProductionTab products={rawProducts} />}
-        {activeTab === 'shipment' && <ShipmentTab partnerId={partnerId} />}
+        {activeTab === 'receiving' && <ReceivingTab products={receivingCandidates} />}
+        {activeTab === 'production' && <ProductionTab products={productionCandidates} />}
+        {activeTab === 'shipment' && <ShipmentTab partnerId={partnerId} products={shipmentCandidates} />}
         {activeTab === 'defective' && (
-          <DefectiveTab products={defectiveProducts} />
+          <DefectiveTab products={defectiveCandidates} />
         )}
         {activeTab === 'history' && <HistoryTable />}
       </div>
@@ -91,7 +95,13 @@ export default function OperationPanel({
 // ============================================================================
 // 1. 受入登録タブ
 // ============================================================================
-function ReceivingTab({ products }: { products: RawProduct[] }) {
+// ============================================================================
+// 1. 受入登録タブ
+// ============================================================================
+// ============================================================================
+// 1. 受入登録タブ
+// ============================================================================
+function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
   const [inputs, setInputs] = useState<
     Record<number, { qty: string; date: string }>
   >({});
@@ -99,13 +109,12 @@ function ReceivingTab({ products }: { products: RawProduct[] }) {
 
   const handleChange = (id: number, field: 'qty' | 'date', value: string) => {
     setInputs((prev) => {
-      // ★修正: 二重定義エラー回避のため、初期値を外に出す
       const current = prev[id] || { qty: '', date: '' };
       return { ...prev, [id]: { ...current, [field]: value } };
     });
   };
 
-  const handleRegister = async (p: RawProduct) => {
+  const handleRegister = async (p: ReceivingProduct) => {
     const input = inputs[p.id];
     if (!input?.qty) return alert('数量を入力してください');
     if (confirm(`${p.name} を ${input.qty}個 受入登録しますか？`)) {
@@ -113,7 +122,7 @@ function ReceivingTab({ products }: { products: RawProduct[] }) {
       const res = await registerReceiving({
         productId: p.id,
         quantity: Number(input.qty),
-        dueDate: input.date || '', // 納期は任意
+        dueDate: input.date || '',
       });
       alert(res.message);
       if (res.success)
@@ -127,66 +136,52 @@ function ReceivingTab({ products }: { products: RawProduct[] }) {
       <h3 className="font-bold text-gray-700 border-l-4 border-yellow-400 pl-3">
         生地・部材の受入
       </h3>
-      {products.length === 0 ? (
-        <p className="text-gray-400 py-4">対象製品がありません</p>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {products.map((p) => (
-            <div
-              key={p.id}
-              className="border p-4 rounded bg-gray-50 hover:bg-white transition-colors"
-            >
-              <div className="font-bold text-lg mb-1">{p.name}</div>
-              <div className="text-xs text-gray-500 mb-2">
-                {p.product_code} {p.color_text}
+      <InventoryTable
+        products={products}
+        placeholder="製品名、品番、色で検索..."
+        renderRow={(p) => (
+          <tr key={p.id} className="hover:bg-yellow-50">
+            <td className="px-4 py-3 text-sm font-mono text-gray-600">{p.product_code}</td>
+            <td className="px-4 py-3 text-sm font-bold text-gray-800">{p.name}</td>
+            <td className="px-4 py-3 text-sm text-gray-500">
+              {p.color_text}
+              <div className="text-xs text-gray-400 mt-1">
+                現在庫: <span className="font-bold">{p.stock_raw.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-sm mb-3">
-                <span>
-                  現在庫:{' '}
-                  <span className="font-bold">
-                    {p.stock_raw.toLocaleString()}
-                  </span>
-                </span>
-              </div>
-              <div className="space-y-2">
+            </td>
+            <td className="px-4 py-3">
+              <div className="flex gap-2 items-center">
                 <input
                   type="number"
-                  placeholder="受入数量"
-                  className="w-full border p-2 rounded"
+                  placeholder="数量"
+                  className="w-24 border p-1 rounded text-right"
                   value={inputs[p.id]?.qty || ''}
                   onChange={(e) => handleChange(p.id, 'qty', e.target.value)}
                 />
                 <input
                   type="date"
-                  className="w-full border p-2 rounded text-sm text-gray-500"
+                  className="w-32 border p-1 rounded text-xs text-gray-500"
                   value={inputs[p.id]?.date || ''}
                   onChange={(e) => handleChange(p.id, 'date', e.target.value)}
                 />
                 <button
                   onClick={() => handleRegister(p)}
                   disabled={isSubmitting}
-                  className="w-full bg-yellow-500 text-white font-bold py-2 rounded hover:bg-yellow-600 disabled:opacity-50"
+                  className="bg-yellow-500 text-white px-3 py-1 rounded text-sm font-bold hover:bg-yellow-600 disabled:opacity-50 whitespace-nowrap"
                 >
-                  受入登録
+                  登録
                 </button>
               </div>
-              {/* 直近の入荷履歴を表示 */}
+              {/* @ts-ignore */}
               {p.arrivals && p.arrivals.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <p className="text-xs font-bold text-gray-400 mb-1">
-                    直近の入荷
-                  </p>
-                  <ul className="text-xs text-gray-600 space-y-1">
-                    {p.arrivals.map((log, i) => (
-                      <li key={i}>・{log.label}</li>
-                    ))}
-                  </ul>
+                <div className="text-xs text-gray-400 mt-1">
+                  直近: {p.arrivals[0].label}
                 </div>
               )}
-            </div>
-          ))}
-        </div>
-      )}
+            </td>
+          </tr>
+        )}
+      />
     </div>
   );
 }
@@ -202,13 +197,12 @@ type ProdInput = {
   sourceDate: string;
 };
 
-function ProductionTab({ products }: { products: RawProduct[] }) {
+function ProductionTab({ products }: { products: ProductionProduct[] }) {
   const [inputs, setInputs] = useState<Record<number, ProdInput>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (id: number, field: keyof ProdInput, value: string) => {
     setInputs((prev) => {
-      // ★修正: 初期値を外に出してスッキリさせる
       const current = prev[id] || {
         finished: '',
         rawUsed: '',
@@ -232,11 +226,7 @@ function ProductionTab({ products }: { products: RawProduct[] }) {
         defects: {},
         sourceDate: '',
       };
-      // 不良数の合計を計算して defective にセット
-      const totalDefective = Object.values(newDefects).reduce(
-        (a, b) => a + b,
-        0
-      );
+      const totalDefective = Object.values(newDefects).reduce((a, b) => a + b, 0);
       return {
         ...prev,
         [productId]: {
@@ -248,16 +238,15 @@ function ProductionTab({ products }: { products: RawProduct[] }) {
     });
   };
 
-  const handleRegister = async (p: RawProduct) => {
+  const handleRegister = async (p: ProductionProduct) => {
     const inp = inputs[p.id] || {};
     const finished = Number(inp.finished || 0);
     const defective = Number(inp.defective || 0);
-    const rawUsed = Number(inp.rawUsed) || finished + defective; // 入力なければ自動計算
+    const rawUsed = Number(inp.rawUsed) || finished + defective;
 
     if (finished + defective === 0)
       return alert('完成数または不良数を入力してください');
 
-    // 不良理由のテキスト化
     let defectReason = '';
     if (inp.defects && Object.keys(inp.defects).length > 0) {
       defectReason = Object.entries(inp.defects)
@@ -281,16 +270,11 @@ function ProductionTab({ products }: { products: RawProduct[] }) {
       });
       alert(res.message);
       if (res.success)
-        setInputs((prev) => ({
-          ...prev,
-          [p.id]: {
-            finished: '',
-            rawUsed: '',
-            defective: '',
-            defects: {},
-            sourceDate: '',
-          },
-        }));
+        setInputs((prev) => {
+          const next = { ...prev };
+          delete next[p.id];
+          return next;
+        });
       setIsSubmitting(false);
     }
   };
@@ -300,33 +284,30 @@ function ProductionTab({ products }: { products: RawProduct[] }) {
       <h3 className="font-bold text-gray-700 border-l-4 border-blue-500 pl-3">
         加工実績の登録
       </h3>
-      {products.length === 0 ? (
-        <p className="text-gray-400 py-4">対象製品がありません</p>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {products.map((p) => {
-            const inp = inputs[p.id] || {};
-            return (
-              <div
-                key={p.id}
-                className="border p-4 rounded bg-gray-50 hover:bg-white transition-colors relative"
-              >
-                <div className="font-bold text-lg mb-1">{p.name}</div>
-                <div className="text-xs text-gray-500 mb-3">
-                  {p.product_code} {p.color_text}
-                </div>
-
-                {/* 入荷日選択プルダウン */}
+      <InventoryTable
+        products={products}
+        placeholder="製品名、品番、色で検索..."
+        renderRow={(p) => {
+          const inp = inputs[p.id] || {};
+          return (
+            <tr key={p.id} className="hover:bg-blue-50">
+              <td className="px-4 py-3 text-sm font-mono text-gray-600">{p.product_code}</td>
+              <td className="px-4 py-3 text-sm font-bold text-gray-800">
+                {p.name}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-500">
+                {p.color_text}
+                {/* 入荷情報の表示と選択 */}
                 {p.arrivals && p.arrivals.length > 0 && (
-                  <div className="mb-3">
+                  <div className="mt-1">
                     <select
-                      className="w-full text-xs border rounded p-1 bg-white text-gray-700"
+                      className="text-xs border rounded p-1 bg-white text-gray-700 w-full max-w-[150px]"
                       value={inp.sourceDate || ''}
                       onChange={(e) =>
                         handleChange(p.id, 'sourceDate', e.target.value)
                       }
                     >
-                      <option value="">いつの入荷分を使用？ (指定なし)</option>
+                      <option value="">(入荷日自動)</option>
                       {p.arrivals.map((a, idx) => (
                         <option key={idx} value={a.value}>
                           {a.label}
@@ -335,58 +316,47 @@ function ProductionTab({ products }: { products: RawProduct[] }) {
                     </select>
                   </div>
                 )}
-
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold w-12 text-blue-600">
-                      完成
-                    </span>
+              </td>
+              <td className="px-4 py-3">
+                <div className="space-y-2">
+                  <div className="flex gap-2 items-end">
+                    <label className="text-xs font-bold text-blue-600 w-8">良品</label>
                     <input
                       type="number"
+                      className="w-20 border p-1 rounded text-right font-bold"
                       placeholder="0"
-                      className="flex-1 border p-2 rounded font-bold"
                       value={inp.finished || ''}
-                      onChange={(e) =>
-                        handleChange(p.id, 'finished', e.target.value)
-                      }
+                      onChange={(e) => handleChange(p.id, 'finished', e.target.value)}
                     />
-                  </div>
-
-                  {/* 不良入力コンポーネント */}
-                  <DefectInputRow
-                    productId={p.id}
-                    currentDefects={inp.defects || {}}
-                    onSave={handleDefectsSave}
-                  />
-
-                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
-                    <span className="text-xs font-bold w-12 text-gray-500">
-                      消費
-                    </span>
+                    <label className="text-xs font-bold text-gray-500 w-8">消費</label>
                     <input
                       type="number"
+                      className="w-16 border p-1 rounded text-right bg-gray-100 text-xs"
                       placeholder="自動"
-                      className="flex-1 border p-1 rounded text-sm bg-gray-100"
                       value={inp.rawUsed || ''}
-                      onChange={(e) =>
-                        handleChange(p.id, 'rawUsed', e.target.value)
-                      }
+                      onChange={(e) => handleChange(p.id, 'rawUsed', e.target.value)}
+                    />
+                    <button
+                      onClick={() => handleRegister(p)}
+                      disabled={isSubmitting}
+                      className="ml-2 bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      登録
+                    </button>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <DefectInputRow
+                      productId={p.id}
+                      currentDefects={inp.defects || {}}
+                      onSave={handleDefectsSave}
                     />
                   </div>
-
-                  <button
-                    onClick={() => handleRegister(p)}
-                    disabled={isSubmitting}
-                    className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 disabled:opacity-50 mt-2"
-                  >
-                    実績登録
-                  </button>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              </td>
+            </tr>
+          )
+        }}
+      />
     </div>
   );
 }
@@ -404,8 +374,14 @@ function DefectInputRow({
   const [isOpen, setIsOpen] = useState(false);
   const total = Object.values(currentDefects).reduce((a, b) => a + b, 0);
 
-  // 不良理由マスタ
-  const reasons = ['打痕', '塗装不良', 'メッキ不良', '寸法NG', 'その他'];
+  // 不良理由マスタ (要求仕様へ更新)
+  // 社外起因: 生地不良、その他
+  // 社内起因: タレ・ワキ、スケ、糸ゴミ、虫ゴミ、ブツ、キズ、ハジキ、打痕、水跡、その他
+  const reasonsExternal = ['生地不良', 'その他(社外)'];
+  const reasonsInternal = [
+    'タレ・ワキ', 'スケ', '糸ゴミ', '虫ゴミ',
+    'ブツ', 'キズ', 'ハジキ', '打痕', '水跡', 'その他(社内)'
+  ];
 
   const handleReasonChange = (reason: string, val: string) => {
     const num = Number(val);
@@ -418,40 +394,69 @@ function DefectInputRow({
   return (
     <div className="relative">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-bold w-12 text-red-500">不良</span>
+        <label className="text-xs font-bold text-red-500 w-8">不良</label>
         <div
           onClick={() => setIsOpen(!isOpen)}
-          className="flex-1 border p-2 rounded bg-red-50 text-red-600 cursor-pointer flex justify-between items-center hover:bg-red-100"
+          className="w-20 border p-1 rounded bg-red-50 text-red-600 font-bold cursor-pointer hover:bg-red-100 text-right"
         >
-          <span className="font-bold">{total > 0 ? total : ''}</span>
-          <span className="text-xs">▼ 詳細</span>
+          {total > 0 ? total : '0'}
         </div>
+        {total > 0 && <span className="text-xs text-red-400">詳細入力済</span>}
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 z-10 w-64 bg-white border border-gray-300 shadow-xl rounded-lg p-3 mt-1">
-          <div className="flex justify-between items-center mb-2 pb-2 border-b">
-            <span className="font-bold text-sm text-gray-700">不良内訳</span>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="space-y-2">
-            {reasons.map((r) => (
-              <div key={r} className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">{r}</span>
-                <input
-                  type="number"
-                  className="w-16 border rounded p-1 text-right text-sm"
-                  placeholder="0"
-                  value={currentDefects[r] || ''}
-                  onChange={(e) => handleReasonChange(r, e.target.value)}
-                />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onClick={() => setIsOpen(false)}>
+          <div className="bg-white border border-gray-300 shadow-xl rounded-lg p-4 w-[400px] max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <span className="font-bold text-gray-700">不良内訳入力</span>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h5 className="text-xs font-bold text-gray-500 mb-2">【社外起因】</h5>
+                <div className="grid grid-cols-2 gap-2">
+                  {reasonsExternal.map((r) => (
+                    <div key={r} className="flex items-center justify-between bg-gray-50 p-1 px-2 rounded">
+                      <span className="text-sm text-gray-600">{r}</span>
+                      <input
+                        type="number"
+                        className="w-16 border rounded p-1 text-right text-sm"
+                        placeholder="0"
+                        value={currentDefects[r] || ''}
+                        onChange={(e) => handleReasonChange(r, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+              <div>
+                <h5 className="text-xs font-bold text-gray-500 mb-2">【社内起因】</h5>
+                <div className="grid grid-cols-2 gap-2">
+                  {reasonsInternal.map((r) => (
+                    <div key={r} className="flex items-center justify-between bg-gray-50 p-1 px-2 rounded">
+                      <span className="text-sm text-gray-600 truncate mr-1" title={r}>{r}</span>
+                      <input
+                        type="number"
+                        className="w-16 border rounded p-1 text-right text-sm flex-shrink-0"
+                        placeholder="0"
+                        value={currentDefects[r] || ''}
+                        onChange={(e) => handleReasonChange(r, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 text-right">
+              <button className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700" onClick={() => setIsOpen(false)}>決定</button>
+            </div>
           </div>
         </div>
       )}
@@ -462,23 +467,30 @@ function DefectInputRow({
 // ============================================================================
 // 3. 出荷登録タブ
 // ============================================================================
-function ShipmentTab({ partnerId }: { partnerId: string }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [products, setProducts] = useState<any[]>([]);
+// ============================================================================
+// 3. 出荷登録タブ
+// ============================================================================
+// ============================================================================
+// 3. 出荷登録タブ
+// ============================================================================
+function ShipmentTab({
+  partnerId,
+  products
+}: {
+  partnerId: string;
+  products: ShipmentProduct[];
+}) {
   const [inputs, setInputs] = useState<Record<number, string>>({});
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [history, setHistory] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 初期ロード
+  // 履歴のみロード
   useEffect(() => {
     const load = async () => {
-      const [pData, hData] = await Promise.all([
-        getProductsByPartner(partnerId),
-        getRecentShipments(partnerId),
-      ]);
-      setProducts(pData || []);
+      const { getRecentShipments } = await import('./actions');
+      const hData = await getRecentShipments(partnerId);
       setHistory(hData || []);
     };
     load();
@@ -509,6 +521,7 @@ function ShipmentTab({ partnerId }: { partnerId: string }) {
         // 履歴更新
         const hData = await getRecentShipments(partnerId);
         setHistory(hData || []);
+        // 在庫更新反映のためリロード推奨だが、簡易的に入力をクリア
       } else {
         alert(res.message);
       }
@@ -517,7 +530,7 @@ function ShipmentTab({ partnerId }: { partnerId: string }) {
   };
 
   return (
-    <div className="flex gap-6">
+    <div className="flex flex-col lg:flex-row gap-6">
       <div className="flex-1 space-y-4">
         <h3 className="font-bold text-gray-700 border-l-4 border-green-500 pl-3">
           出荷データの登録
@@ -533,54 +546,35 @@ function ShipmentTab({ partnerId }: { partnerId: string }) {
           />
         </div>
 
-        {products.length === 0 ? (
-          <p className="text-gray-400">登録された製品がありません</p>
-        ) : (
-          <div className="bg-white border rounded shadow-sm overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-500">
-                    製品コード
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-500">
-                    製品名
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-500">
-                    色
-                  </th>
-                  <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 w-32">
-                    出荷数量
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {products.map((p) => (
-                  <tr key={p.id} className={inputs[p.id] ? 'bg-green-50' : ''}>
-                    <td className="px-4 py-3 text-sm font-mono text-gray-600">
-                      {p.product_code}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-bold text-gray-800">
-                      {p.name}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      {p.color}
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        className="w-full border p-1 rounded text-right font-bold focus:ring-2 focus:ring-green-500 focus:outline-none"
-                        placeholder="0"
-                        value={inputs[p.id] || ''}
-                        onChange={(e) => handleChange(p.id, e.target.value)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <InventoryTable
+          products={products}
+          placeholder="製品名、品番、色で検索..."
+          renderRow={(p) => (
+            <tr key={p.id} className={inputs[p.id] ? 'bg-green-50' : 'hover:bg-gray-50'}>
+              <td className="px-4 py-3 text-sm font-mono text-gray-600">
+                {p.product_code}
+              </td>
+              <td className="px-4 py-3 text-sm font-bold text-gray-800">
+                {p.name}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-500">
+                {p.color_text}
+                <div className="text-xs text-green-600 mt-1">
+                  完成在庫: <span className="font-bold">{p.stock_finished.toLocaleString()}</span>
+                </div>
+              </td>
+              <td className="px-4 py-2">
+                <input
+                  type="number"
+                  className="w-full border p-1 rounded text-right font-bold focus:ring-2 focus:ring-green-500 focus:outline-none"
+                  placeholder="0"
+                  value={inputs[p.id] || ''}
+                  onChange={(e) => handleChange(p.id, e.target.value)}
+                />
+              </td>
+            </tr>
+          )}
+        />
 
         <div className="pt-4 text-right">
           <button
@@ -594,7 +588,7 @@ function ShipmentTab({ partnerId }: { partnerId: string }) {
       </div>
 
       {/* 右側サイド: 直近の出荷履歴リスト */}
-      <div className="w-64 flex-shrink-0 border-l pl-6 hidden lg:block">
+      <div className="w-full lg:w-64 flex-shrink-0 border-t lg:border-t-0 lg:border-l lg:pl-6 pt-6 lg:pt-0">
         <h4 className="font-bold text-gray-500 mb-4 text-sm">
           最近の出荷リスト
         </h4>
@@ -640,7 +634,6 @@ function DefectiveTab({ products }: { products: DefectiveProduct[] }) {
     value: string
   ) => {
     setInputs((prev) => {
-      // ★修正: 初期値を外に出す
       const current = prev[id] || { rework: '', return: '' };
       return { ...prev, [id]: { ...current, [field]: value } };
     });
@@ -679,81 +672,66 @@ function DefectiveTab({ products }: { products: DefectiveProduct[] }) {
         発生した不良品について、「手直しして良品にする」か「客先へ返却(廃棄)する」かを登録します。
       </p>
 
-      {products.length === 0 ? (
-        <div className="p-8 text-center bg-gray-50 rounded text-gray-400">
-          現在、不良在庫はありません
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {products.map((p) => (
-            <div
-              key={p.id}
-              className="border p-4 rounded bg-red-50 border-red-100"
-            >
-              <div className="font-bold text-lg text-gray-800">{p.name}</div>
-              <div className="text-xs text-gray-500 mb-2">{p.product_code}</div>
-              <div className="mb-4 text-center bg-white rounded p-2 border border-red-200">
-                <span className="text-xs text-gray-500 block">不良在庫</span>
-                <span className="text-xl font-bold text-red-600">
-                  {p.stock_defective}
-                </span>
+      <InventoryTable
+        products={products}
+        placeholder="製品名、品番、色で検索..."
+        renderRow={(p) => (
+          <tr key={p.id} className="hover:bg-red-50">
+            <td className="px-4 py-3 text-sm font-mono text-gray-600">{p.product_code}</td>
+            <td className="px-4 py-3 text-sm font-bold text-gray-800">{p.name}</td>
+            <td className="px-4 py-3 text-sm text-gray-500">
+              {p.color_text}
+              <div className="text-xs text-red-600 mt-1">
+                不良在庫: <span className="font-bold">{p.stock_defective.toLocaleString()}</span>
               </div>
-
+            </td>
+            <td className="px-4 py-3">
+              <div className="space-y-2">
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs font-bold w-16 text-blue-600">手直しOK</span>
+                  <input
+                    type="number"
+                    placeholder="良品へ"
+                    className="w-20 border p-1 rounded text-right text-sm"
+                    value={inputs[p.id]?.rework || ''}
+                    onChange={(e) => handleChange(p.id, 'rework', e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs font-bold w-16 text-gray-500">返却/廃棄</span>
+                  <input
+                    type="number"
+                    placeholder="在庫減"
+                    className="w-20 border p-1 rounded text-right text-sm"
+                    value={inputs[p.id]?.return || ''}
+                    onChange={(e) => handleChange(p.id, 'return', e.target.value)}
+                  />
+                  <button
+                    onClick={() => handleRegister(p)}
+                    disabled={isSubmitting}
+                    className="ml-2 bg-red-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-600 disabled:opacity-50"
+                  >
+                    処理登録
+                  </button>
+                </div>
+              </div>
               {/* 直近の不良理由 */}
               {p.recent_defects.length > 0 && (
-                <div className="mb-3 text-xs bg-white/50 p-2 rounded">
+                <div className="mt-2 text-xs bg-white/50 p-2 rounded border border-red-100">
                   <p className="font-bold text-gray-500 mb-1">
                     最近の不良理由:
                   </p>
                   {p.recent_defects.map((d, i) => (
-                    <div key={i} className="text-gray-600">
+                    <span key={i} className="text-gray-600 block">
                       ・{d.reason} ({d.date})
-                    </div>
+                    </span>
                   ))}
                 </div>
               )}
-
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold w-16 text-blue-600">
-                    手直しOK
-                  </span>
-                  <input
-                    type="number"
-                    placeholder="良品へ"
-                    className="flex-1 border p-1 rounded"
-                    value={inputs[p.id]?.rework || ''}
-                    onChange={(e) =>
-                      handleChange(p.id, 'rework', e.target.value)
-                    }
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold w-16 text-gray-500">
-                    返却/廃棄
-                  </span>
-                  <input
-                    type="number"
-                    placeholder="在庫減"
-                    className="flex-1 border p-1 rounded"
-                    value={inputs[p.id]?.return || ''}
-                    onChange={(e) =>
-                      handleChange(p.id, 'return', e.target.value)
-                    }
-                  />
-                </div>
-                <button
-                  onClick={() => handleRegister(p)}
-                  disabled={isSubmitting}
-                  className="w-full bg-red-500 text-white font-bold py-2 rounded hover:bg-red-600 disabled:opacity-50 text-sm"
-                >
-                  処理登録
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            </td>
+          </tr>
+        )}
+      />
     </div>
   );
 }

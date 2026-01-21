@@ -4,6 +4,8 @@ import InventoryList from './inventory-list';
 import PartnerSelector from './partner-selector';
 import {
   getProductsByPartner,
+  getRawStockProductsByPartner,
+  getFinishedStockProductsByPartner,
   getDefectiveProductsByPartner,
   getAllInventory,
 } from './actions';
@@ -26,9 +28,21 @@ export default async function InventoryPage(props: Props) {
 
   // 2. 詳細データ取得 (partnerIdがある場合)
   // サーバーサイドで並列取得
-  const [inventory, rawProducts, defectiveProducts] = await Promise.all([
-    getAllInventory(),
+  // ・受入タブ用: 全製品 (receivingCandidates)
+  // ・加工タブ用: 部材在庫あり (productionCandidates)
+  // ・出荷タブ用: 完成在庫あり (shipmentCandidates)
+  // ・不良タブ用: 不良在庫あり (defectiveCandidates)
+  const [
+    inventory,
+    productsAll,
+    productsRaw,
+    productsFinished,
+    productsDefective
+  ] = await Promise.all([
+    getAllInventory(), // 下段の全在庫リスト用
     partnerId ? getProductsByPartner(partnerId) : Promise.resolve([]),
+    partnerId ? getRawStockProductsByPartner(partnerId) : Promise.resolve([]),
+    partnerId ? getFinishedStockProductsByPartner(partnerId) : Promise.resolve([]),
     partnerId ? getDefectiveProductsByPartner(partnerId) : Promise.resolve([]),
   ]);
 
@@ -55,8 +69,10 @@ export default async function InventoryPage(props: Props) {
         ) : (
           <OperationPanel
             partnerId={partnerId}
-            rawProducts={rawProducts}
-            defectiveProducts={defectiveProducts}
+            receivingCandidates={productsAll}
+            productionCandidates={productsRaw}
+            shipmentCandidates={productsFinished}
+            defectiveCandidates={productsDefective}
           />
         )}
       </div>

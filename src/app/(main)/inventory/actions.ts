@@ -4,11 +4,12 @@ import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 
 // 共通: 在庫がある製品のみ取得
-export async function getStockProductsByPartner(partnerId: string) {
+// 共通: 完成と在庫がある製品のみ取得 (出荷登録用)
+export async function getFinishedStockProductsByPartner(partnerId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from('inventory')
-    .select('stock_finished, products!inner(id, name, product_code, color)')
+    .select('stock_finished, products!inner(id, name, product_code, color_text)')
     .eq('products.partner_id', partnerId)
     .gt('stock_finished', 0)
     .order('products(product_code)');
@@ -21,7 +22,7 @@ export async function getStockProductsByPartner(partnerId: string) {
         id: p.id,
         name: p.name,
         product_code: p.product_code,
-        color: p.color,
+        color_text: p.color_text,
         stock_finished: d.stock_finished,
       };
     }) || []
@@ -114,7 +115,7 @@ export async function getProductsByPartner(partnerId: string) {
     product_code: p.product_code,
     color_text: p.color_text,
     stock_raw: stockMap.get(p.id) || 0,
-    arrivals: [], // 入荷履歴は一旦空で返す (必要なら別途取得)
+    arrivals: [] as { label: string; value: string }[], // 入荷履歴は一旦空で返す (必要なら別途取得)
   }));
 }
 
@@ -179,7 +180,7 @@ export async function getDefectiveProductsByPartner(partnerId: string) {
       id: p.id,
       name: p.name,
       product_code: p.product_code,
-      color: p.color,
+      color_text: p.color_text,
       stock_defective: item.stock_defective,
       recent_defects: defectLogs,
       recent_arrivals: arrivalLogs,

@@ -114,33 +114,69 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
     });
   };
 
-  const handleRegister = async (p: ReceivingProduct) => {
-    const input = inputs[p.id];
-    if (!input?.qty) return alert('数量を入力してください');
-    if (confirm(`${p.name} を ${input.qty}個 受入登録しますか？`)) {
-      setIsSubmitting(true);
-      const res = await registerReceiving({
-        productId: p.id,
-        quantity: Number(input.qty),
-        dueDate: input.date || '',
-      });
-      alert(res.message);
-      if (res.success)
-        setInputs((prev) => ({ ...prev, [p.id]: { qty: '', date: '' } }));
-      setIsSubmitting(false);
+  const handleBulkRegister = async () => {
+    const entries = Object.entries(inputs)
+      .map(([id, val]) => ({
+        productId: Number(id),
+        quantity: Number(val.qty),
+        dueDate: val.date || ''
+      }))
+      .filter((e) => e.quantity > 0);
+
+    if (entries.length === 0) return alert('数量を入力してください');
+
+    const productMap = new Map(products.map(p => [p.id, p]));
+    const confirmMsg = entries.map(e => {
+      const p = productMap.get(e.productId);
+      return `・${p?.name}: ${e.quantity}個`;
+    }).join('\n');
+
+    if (!confirm(`以下を一括登録しますか？\n\n${confirmMsg}`)) return;
+
+    setIsSubmitting(true);
+
+    // 並列処理で一括登録
+    const results = await Promise.all(entries.map(e => registerReceiving(e)));
+
+    // エラーがあればアラート
+    const errors = results.filter(r => !r.success);
+    if (errors.length > 0) {
+      alert(`一部エラーが発生しました:\n${errors.map(e => e.message).join('\n')}`);
+    } else {
+      alert('受入登録が完了しました');
     }
+
+    // 成功したものの入力をクリア
+    const newInputs = { ...inputs };
+    entries.forEach((e, idx) => {
+      if (results[idx].success) {
+        delete newInputs[e.productId];
+      }
+    });
+    setInputs(newInputs);
+    setIsSubmitting(false);
   };
 
   return (
     <div className="space-y-4">
-      <h3 className="font-bold text-gray-700 border-l-4 border-yellow-400 pl-3">
-        生地・部材の受入
-      </h3>
+      <div className="flex justify-between items-center border-l-4 border-yellow-400 pl-3">
+        <h3 className="font-bold text-gray-700">
+          生地・部材の受入
+        </h3>
+        <button
+          onClick={handleBulkRegister}
+          disabled={isSubmitting}
+          className="bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-yellow-600 disabled:opacity-50 shadow-sm"
+        >
+          一括受入登録
+        </button>
+      </div>
+
       <InventoryTable
         products={products}
         placeholder="製品名、品番、色で検索..."
         renderRow={(p) => (
-          <tr key={p.id} className="hover:bg-yellow-50">
+          <tr key={p.id} className={inputs[p.id]?.qty ? "bg-yellow-50" : "hover:bg-yellow-50"}>
             <td className="px-4 py-3 text-sm font-mono text-gray-600">{p.product_code}</td>
             <td className="px-4 py-3 text-sm font-bold text-gray-800">{p.name}</td>
             <td className="px-4 py-3 text-sm text-gray-500">
@@ -154,7 +190,7 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
                 <input
                   type="number"
                   placeholder="数量"
-                  className="w-24 border p-1 rounded text-right"
+                  className="w-24 border p-1 rounded text-right font-bold focus:outline-none focus:ring-2 focus:ring-yellow-400"
                   value={inputs[p.id]?.qty || ''}
                   onChange={(e) => handleChange(p.id, 'qty', e.target.value)}
                 />
@@ -164,13 +200,6 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
                   value={inputs[p.id]?.date || ''}
                   onChange={(e) => handleChange(p.id, 'date', e.target.value)}
                 />
-                <button
-                  onClick={() => handleRegister(p)}
-                  disabled={isSubmitting}
-                  className="bg-yellow-500 text-white px-3 py-1 rounded text-sm font-bold hover:bg-yellow-600 disabled:opacity-50 whitespace-nowrap"
-                >
-                  登録
-                </button>
               </div>
               {/* @ts-ignore */}
               {p.arrivals && p.arrivals.length > 0 && (
@@ -182,6 +211,17 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
           </tr>
         )}
       />
+
+      {/* 下部にもボタン配置（リストが長い場合用） */}
+      <div className="text-right pt-2">
+        <button
+          onClick={handleBulkRegister}
+          disabled={isSubmitting}
+          className="bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-yellow-600 disabled:opacity-50 shadow-sm"
+        >
+          一括受入登録
+        </button>
+      </div>
     </div>
   );
 }

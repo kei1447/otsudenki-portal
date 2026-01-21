@@ -97,7 +97,7 @@ export default function InventoryTable<T extends ProductBase>({
                             >
                                 品名 <Arrow active={sortKey === 'name'} dir={order} />
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ width: '100px' }}>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ width: '160px' }}>
                                 色・仕様
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">

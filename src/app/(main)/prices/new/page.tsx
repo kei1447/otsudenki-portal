@@ -17,6 +17,11 @@ export default async function NewPricePage() {
     .eq('is_discontinued', false) // 廃盤品は除外
     .order('product_code')
 
+  const normalizedProducts = (products || []).map((p: any) => ({
+    ...p,
+    partners: Array.isArray(p.partners) ? p.partners[0] ?? null : p.partners,
+  }))
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
@@ -27,7 +32,7 @@ export default async function NewPricePage() {
       </div>
 
       <div className="bg-white shadow rounded-lg p-6">
-        <FormContent products={products || []} />
+        <FormContent products={normalizedProducts} />
       </div>
     </div>
   )

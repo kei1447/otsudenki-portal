@@ -5,7 +5,7 @@ import { login } from './actions'
 
 export default function LoginPage() {
   // フォームの状態管理（初期値はnull）
-  const [state, formAction, isPending] = useActionState(login, { error: null })
+  const [state, formAction, isPending] = useActionState(login, { error: '' })
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">

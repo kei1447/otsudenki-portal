@@ -19,6 +19,12 @@ export default async function BulkRegisterPage() {
     .eq('is_discontinued', false)
     .order('product_code')
 
+  // Supabaseのリレーションは配列で返るため、1件だけ取り出して型を合わせる
+  const normalizedProducts = (products || []).map((p: any) => ({
+    ...p,
+    partners: Array.isArray(p.partners) ? p.partners[0] ?? null : p.partners,
+  }))
+
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
@@ -36,7 +42,7 @@ export default async function BulkRegisterPage() {
         </Link>
       </div>
 
-      <BulkRegister products={products || []} />
+      <BulkRegister products={normalizedProducts} />
     </div>
   )
 }

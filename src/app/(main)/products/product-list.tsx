@@ -1,11 +1,21 @@
 'use client'
 
 import { deleteProduct } from './actions'
+import type { Product, Partner } from '@/types/models'
 
-export default function ProductList({ products }: { products: any[] }) {
-  const handleDelete = async (id: string) => {
+type Props = {
+  initialProducts: Product[]
+  masterPartners: Partner[]
+}
+
+export default function ProductList({ initialProducts }: Props) {
+  const products = initialProducts.map((p) => ({
+    ...p,
+    partners: Array.isArray(p.partners) ? p.partners[0] ?? null : p.partners,
+  }))
+  const handleDelete = async (id: string | number) => {
     if (!confirm('本当に削除しますか？')) return
-    const res = await deleteProduct(id)
+    const res = await deleteProduct(String(id))
     alert(res.message)
   }
 

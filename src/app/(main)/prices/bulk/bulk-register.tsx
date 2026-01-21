@@ -94,7 +94,7 @@ export default function BulkRegister({ products }: { products: ProductMaster[] }
     const lines = text.split(/\r\n|\n|\r/).filter(line => line.trim() !== '')
     const dataLines = lines.slice(1)
 
-    const parsedRows: RowData[] = dataLines.map((line) => {
+    const parsedRows = dataLines.map<RowData | null>((line) => {
       // 簡易的なCSV分割
       const cols = line.split(',') 
       // [0]型番, [1]取引先, [2]品名, [3]色, [4]単価, [5]日付, [6]理由

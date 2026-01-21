@@ -14,7 +14,7 @@ type Product = {
 }
 
 export default function FormContent({ products }: { products: Product[] }) {
-  const [state, formAction, isPending] = useActionState(createPrice, { error: null })
+  const [state, formAction, isPending] = useActionState(createPrice, { error: '' })
 
   return (
     <form action={formAction} className="space-y-6">

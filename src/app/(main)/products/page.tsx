@@ -19,7 +19,7 @@ export default async function ProductsPage(props: Props) {
 
   // --- 1. 製品データの取得 (サーバーサイド検索) ---
   // !inner を使うことで、関連テーブル(partners)の条件で絞り込みが可能になります
-  let query = supabase.from('products').select('*, partners!inner(name)');
+  let query = supabase.from('products').select('*, partners!inner(id, name)');
 
   // (A) 取引先フィルタ
   if (partnerName) {

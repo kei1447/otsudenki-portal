@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   getPartners,
   createPartner,
@@ -10,6 +11,7 @@ import {
 import type { Partner } from '@/types/models';
 
 export default function PartnersPage() {
+  const router = useRouter();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -82,6 +84,7 @@ export default function PartnersPage() {
       alert(res.message);
       setIsEditing(false);
       loadPartners();
+      router.refresh(); // Server Componentsのキャッシュをクリア
     } else {
       alert(res.message);
     }

@@ -79,6 +79,7 @@ export async function getRawStockProductsByPartner(partnerId: string) {
       product_code: p.product_code,
       color: p.color,
       stock_raw: item.stock_raw,
+      arrivals: arrivals,
     };
   });
 }

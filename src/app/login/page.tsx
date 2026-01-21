@@ -1,11 +1,11 @@
-'use client'
+'use client';
 
-import { useActionState } from 'react'
-import { login } from './actions'
+import { useActionState } from 'react';
+import { login } from './actions';
 
 export default function LoginPage() {
   // フォームの状態管理（初期値はnull）
-  const [state, formAction, isPending] = useActionState(login, { error: '' })
+  const [state, formAction, isPending] = useActionState(login, { error: '' });
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -54,9 +54,7 @@ export default function LoginPage() {
           {/* エラーがある場合のみ赤文字で表示 */}
           {state?.error && (
             <div className="rounded-md bg-red-50 p-4 text-center">
-              <p className="text-sm font-medium text-red-800">
-                {state.error}
-              </p>
+              <p className="text-sm font-medium text-red-800">{state.error}</p>
             </div>
           )}
 
@@ -76,5 +74,5 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
-  )
+  );
 }

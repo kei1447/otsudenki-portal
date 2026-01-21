@@ -1,22 +1,27 @@
-import { createClient } from '@/utils/supabase/server'
-import UserList from './user-list'
+import { createClient } from '@/utils/supabase/server';
+import UserList from './user-list';
 
 export default async function UsersPage() {
-  const supabase = await createClient()
+  const supabase = await createClient();
 
   // プロフィール一覧を取得
   const { data: profiles, error } = await supabase
     .from('profiles')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false });
 
   if (error) {
-    return <div className="text-red-500">データ取得エラー: {error.message}</div>
+    return (
+      <div className="text-red-500">データ取得エラー: {error.message}</div>
+    );
   }
 
   // 自分の情報を取得（自分がadminかどうか判定するため）
-  const { data: { user } } = await supabase.auth.getUser()
-  const currentUserRole = profiles?.find(p => p.id === user?.id)?.role || 'staff'
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const currentUserRole =
+    profiles?.find((p) => p.id === user?.id)?.role || 'staff';
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -27,10 +32,7 @@ export default async function UsersPage() {
         </p>
       </div>
 
-      <UserList 
-        profiles={profiles || []} 
-        currentUserRole={currentUserRole}
-      />
+      <UserList profiles={profiles || []} currentUserRole={currentUserRole} />
     </div>
-  )
+  );
 }

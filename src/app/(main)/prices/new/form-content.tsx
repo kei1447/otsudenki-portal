@@ -1,26 +1,31 @@
-'use client'
+'use client';
 
-import { useActionState } from 'react'
-import { createPrice } from './actions'
-import Link from 'next/link'
+import { useActionState } from 'react';
+import { createPrice } from './actions';
+import Link from 'next/link';
 
 // 修正: DBのカラム名に合わせる
 type Product = {
-  id: number
-  name: string
-  product_code: string // 修正
-  color: string | null // 修正
-  partners: { name: string } | null
-}
+  id: number;
+  name: string;
+  product_code: string; // 修正
+  color: string | null; // 修正
+  partners: { name: string } | null;
+};
 
 export default function FormContent({ products }: { products: Product[] }) {
-  const [state, formAction, isPending] = useActionState(createPrice, { error: '' })
+  const [state, formAction, isPending] = useActionState(createPrice, {
+    error: '',
+  });
 
   return (
     <form action={formAction} className="space-y-6">
       {/* 1. 製品選択 */}
       <div>
-        <label htmlFor="product_id" className="block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="product_id"
+          className="block text-sm font-medium text-gray-700"
+        >
           対象製品 <span className="text-red-500">*</span>
         </label>
         <div className="mt-1">
@@ -31,11 +36,14 @@ export default function FormContent({ products }: { products: Product[] }) {
             className="block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
             defaultValue=""
           >
-            <option value="" disabled>選択してください</option>
+            <option value="" disabled>
+              選択してください
+            </option>
             {products.map((p) => (
               <option key={p.id} value={p.id}>
-                {/* 表示形式: [取引先] 型番 / 品名 (色) */}
-                [{p.partners?.name}] {p.product_code || '(型番なし)'} / {p.name} {p.color ? `(${p.color})` : ''}
+                {/* 表示形式: [取引先] 型番 / 品名 (色) */}[{p.partners?.name}]{' '}
+                {p.product_code || '(型番なし)'} / {p.name}{' '}
+                {p.color ? `(${p.color})` : ''}
               </option>
             ))}
           </select>
@@ -47,7 +55,10 @@ export default function FormContent({ products }: { products: Product[] }) {
 
       {/* 2. 単価 */}
       <div>
-        <label htmlFor="unit_price" className="block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="unit_price"
+          className="block text-sm font-medium text-gray-700"
+        >
           新単価 (円) <span className="text-red-500">*</span>
         </label>
         <div className="mt-1">
@@ -65,7 +76,10 @@ export default function FormContent({ products }: { products: Product[] }) {
 
       {/* 3. 適用開始日 */}
       <div>
-        <label htmlFor="valid_from" className="block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="valid_from"
+          className="block text-sm font-medium text-gray-700"
+        >
           適用開始日 <span className="text-red-500">*</span>
         </label>
         <div className="mt-1">
@@ -81,7 +95,10 @@ export default function FormContent({ products }: { products: Product[] }) {
 
       {/* 4. 理由 */}
       <div>
-        <label htmlFor="reason" className="block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="reason"
+          className="block text-sm font-medium text-gray-700"
+        >
           改定・設定理由
         </label>
         <div className="mt-1">
@@ -121,5 +138,5 @@ export default function FormContent({ products }: { products: Product[] }) {
         </button>
       </div>
     </form>
-  )
+  );
 }

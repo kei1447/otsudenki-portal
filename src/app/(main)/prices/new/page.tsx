@@ -1,26 +1,29 @@
-import { createClient } from '@/utils/supabase/server'
-import FormContent from './form-content'
+import { createClient } from '@/utils/supabase/server';
+import FormContent from './form-content';
 
 export default async function NewPricePage() {
-  const supabase = await createClient()
+  const supabase = await createClient();
 
   // 修正: customer_product_code -> product_code, color_text -> color
   const { data: products } = await supabase
     .from('products')
-    .select(`
+    .select(
+      `
       id,
       name,
       product_code,
       color,
       partners ( name )
-    `)
+    `
+    )
     .eq('is_discontinued', false) // 廃盤品は除外
-    .order('product_code')
+    .order('product_code');
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const normalizedProducts = (products || []).map((p: any) => ({
     ...p,
-    partners: Array.isArray(p.partners) ? p.partners[0] ?? null : p.partners,
-  }))
+    partners: Array.isArray(p.partners) ? (p.partners[0] ?? null) : p.partners,
+  }));
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -35,5 +38,5 @@ export default async function NewPricePage() {
         <FormContent products={normalizedProducts} />
       </div>
     </div>
-  )
+  );
 }

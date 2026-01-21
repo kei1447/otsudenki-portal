@@ -1,10 +1,10 @@
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@/utils/supabase/server';
 
 export default async function Home() {
-  const supabase = await createClient()
-  
+  const supabase = await createClient();
+
   // 試しにパートナーテーブルを読み込んでみる（まだデータは空ですがエラーが出ないか確認）
-  const { data: partners, error } = await supabase.from('partners').select('*')
+  const { data: partners, error } = await supabase.from('partners').select('*');
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-24">
@@ -15,10 +15,11 @@ export default async function Home() {
           <p className="text-red-500">エラー発生: {error.message}</p>
         ) : (
           <p className="text-green-600">
-            接続成功！現在の取引先登録数: <strong>{partners?.length ?? 0}</strong> 件
+            接続成功！現在の取引先登録数:{' '}
+            <strong>{partners?.length ?? 0}</strong> 件
           </p>
         )}
       </div>
     </div>
-  )
+  );
 }

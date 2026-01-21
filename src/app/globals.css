@@ -24,3 +24,39 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+
+@media print {
+  /* サイドバーやヘッダーなど、印刷用ページ以外の要素を隠す */
+  /* layout.tsxの構成によりますが、一般的にbody直下のレイアウト枠を無効化します */
+  
+  body * {
+    visibility: hidden;
+  }
+
+  /* 印刷用コンテナの中身だけを表示 */
+  /* page.tsx の親divに 'print-content' クラスなどを付ける必要はありません。
+     Next.jsのページ遷移先だけを表示するシンプルな指定にします。 */
+  
+  /* 具体的な指定: サイドバー(navやaside)を消す */
+  nav, aside, header, footer {
+    display: none !important;
+  }
+
+  /* メインエリアと印刷対象を可視化 */
+  main, .print\:block, .print\:visible {
+    visibility: visible !important;
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  
+  /* 印刷ページ内の全要素を可視化 */
+  main * {
+    visibility: visible;
+  }
+}

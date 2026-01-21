@@ -1,19 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { getUnbilledShipments, createSingleInvoice } from '../../actions'
 import Link from 'next/link'
 
-export default function ConfirmInvoicePage({ params }: { params: { partnerId: string } }) {
-  // Next.js 15: paramsの非同期取得 (必要に応じて await)
-  // ここではクライアントコンポーネントなので use() 等のアプローチもあるが、
-  // シンプルに useEffect でラップするか、Promiseとして扱う。
-  // 今回は一旦非同期でIDを取得したと仮定して進めます（Next 15のクライアントコンポーネントではpropsで直接受け取れるケースも多いが、型定義上Promiseの場合がある）
-  
-  // ※Next.jsのバージョンや設定によるため、一旦 params.partnerId を直接使用します。
-  // エラーが出る場合は `use(params)` を使う必要があります。
-  const partnerId = params.partnerId 
+export default function ConfirmInvoicePage() {
+  const params = useParams()
+  const partnerId = params.partnerId as string 
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -32,8 +26,13 @@ export default function ConfirmInvoicePage({ params }: { params: { partnerId: st
       setIsLoading(true)
       const data = await getUnbilledShipments(partnerId, start, end)
       setShipments(data || [])
+      
+      // ★修正: 取引先名取得部分の型エラー回避
       if (data && data.length > 0) {
-        setPartnerName(data[0].partners?.name || '')
+        const p = data[0].partners as any
+        // 配列で来てもオブジェクトで来ても対応できるようにする
+        const name = Array.isArray(p) ? p[0]?.name : p?.name
+        setPartnerName(name || '')
       }
       setIsLoading(false)
     }
@@ -72,7 +71,9 @@ export default function ConfirmInvoicePage({ params }: { params: { partnerId: st
           <p className="text-sm text-gray-500">対象期間: {start} ～ {end}</p>
         </div>
         <div className="flex gap-4">
-          <Link href="/invoices/create" className="px-4 py-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">キャンセル</Link>
+          <Link href="/invoices/create" className="px-4 py-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">
+            キャンセル
+          </Link>
           {shipments.length > 0 && (
             <button 
               onClick={handleConfirm} 
@@ -90,7 +91,6 @@ export default function ConfirmInvoicePage({ params }: { params: { partnerId: st
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* 左側: 納品明細リスト */}
           <div className="lg:col-span-2 space-y-4">
             <h2 className="font-bold text-gray-700">納品明細 ({shipments.length}件)</h2>
             <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -133,7 +133,6 @@ export default function ConfirmInvoicePage({ params }: { params: { partnerId: st
             </div>
           </div>
 
-          {/* 右側: 請求金額サマリ */}
           <div className="lg:col-span-1">
             <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm sticky top-6">
               <h2 className="font-bold text-xl text-gray-800 mb-6 border-b pb-2">請求金額 合計</h2>
@@ -154,8 +153,9 @@ export default function ConfirmInvoicePage({ params }: { params: { partnerId: st
                 <span className="font-bold text-2xl text-indigo-700">¥ {totalAmount.toLocaleString()}</span>
               </div>
 
-              <p className="text-xs text-gray-400">
-                ※「確定して発行」を押すと、これらの納品データが「請求済み」となり、請求書一覧に追加されます。
+              <p className="text-xs text-gray-400 leading-relaxed">
+                ※「確定して発行」を押すと、上記の納品データが「請求済み」となり、請求書一覧に追加されます。<br/>
+                ※税額はインボイス制度に対応し、請求書合計に対して算出しています。
               </p>
             </div>
           </div>

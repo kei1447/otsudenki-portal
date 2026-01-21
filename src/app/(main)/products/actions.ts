@@ -27,7 +27,7 @@ export async function createProduct(formData: FormData) {
     partner_id: formData.get('partner_id'),
     name: formData.get('name'),
     product_code: formData.get('product_code'),
-    color: formData.get('color'),
+    color_text: formData.get('color'), // DB: color_text
     unit_weight: formData.get('unit_weight') || 0,
   };
 

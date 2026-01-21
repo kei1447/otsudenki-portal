@@ -71,7 +71,7 @@ export default function PartnersPage() {
 
     const fd = new FormData();
     fd.set('name', formData.name);
-    fd.set('code', formData.code ?? '');
+    fd.set('partner_code', formData.partner_code ?? '');
     fd.set('address', formData.address ?? '');
     fd.set('phone', formData.phone ?? '');
     fd.set('memo', formData.memo ?? '');
@@ -150,7 +150,7 @@ export default function PartnersPage() {
               {partners.map((p) => (
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-mono text-gray-600">
-                    {p.code || '-'}
+                    {p.partner_code || '-'}
                   </td>
                   <td className="px-6 py-4 text-sm font-bold text-gray-800">
                     {p.name}
@@ -208,9 +208,9 @@ export default function PartnersPage() {
                     type="text"
                     className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
                     placeholder="C001"
-                    value={formData.code || ''}
+                    value={formData.partner_code || ''}
                     onChange={(e) =>
-                      setFormData({ ...formData, code: e.target.value })
+                      setFormData({ ...formData, partner_code: e.target.value })
                     }
                   />
                 </div>

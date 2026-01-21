@@ -4,7 +4,7 @@
 export type Partner = {
   id: string; // UUID
   name: string;
-  code: string | null;
+  partner_code: string | null; // DB: partner_code
   address: string | null;
   phone: string | null;
   memo: string | null;
@@ -14,13 +14,13 @@ export type Partner = {
 };
 
 // 製品 (Products)
-// DBカラム名の変更: customer_product_code -> product_code, color_text -> color
+// DBカラム名: product_code, color_text
 export type Product = {
   id: number; // Integer
   partner_id: string; // UUID
-  product_code: string | null; // 旧: customer_product_code
+  product_code: string | null;
   name: string;
-  color: string | null; // 旧: color_text
+  color_text: string | null; // DB: color_text
   memo: string | null;
   unit_weight: number | null;
   surface_area: number | null;

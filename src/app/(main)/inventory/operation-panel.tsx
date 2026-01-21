@@ -138,7 +138,7 @@ function ReceivingTab({ products }: { products: RawProduct[] }) {
             >
               <div className="font-bold text-lg mb-1">{p.name}</div>
               <div className="text-xs text-gray-500 mb-2">
-                {p.product_code} {p.color}
+                {p.product_code} {p.color_text}
               </div>
               <div className="flex justify-between text-sm mb-3">
                 <span>
@@ -313,7 +313,7 @@ function ProductionTab({ products }: { products: RawProduct[] }) {
               >
                 <div className="font-bold text-lg mb-1">{p.name}</div>
                 <div className="text-xs text-gray-500 mb-3">
-                  {p.product_code} {p.color}
+                  {p.product_code} {p.color_text}
                 </div>
 
                 {/* 入荷日選択プルダウン */}

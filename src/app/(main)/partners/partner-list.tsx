@@ -57,8 +57,8 @@ export default function PartnerList({ partners }: { partners: any[] }) {
                     className="flex gap-2 items-center"
                   >
                     <input
-                      name="code"
-                      defaultValue={p.code}
+                      name="partner_code"
+                      defaultValue={p.partner_code || ''}
                       className="border p-1 w-20 rounded"
                       placeholder="コード"
                       required
@@ -98,7 +98,7 @@ export default function PartnerList({ partners }: { partners: any[] }) {
               ) : (
                 <>
                   <td className="px-6 py-4 text-sm font-mono text-gray-600">
-                    {p.code}
+                    {p.partner_code}
                   </td>
                   <td className="px-6 py-4 text-sm font-bold text-gray-800">
                     {p.name}

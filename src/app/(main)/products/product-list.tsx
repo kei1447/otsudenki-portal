@@ -114,7 +114,7 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
                   <td className="px-6 py-4 text-sm font-bold text-gray-800">
                     {p.name}{' '}
                     <span className="text-xs font-normal text-gray-500 ml-1">
-                      {p.color}
+                      {p.color_text}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">

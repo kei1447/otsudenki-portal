@@ -35,7 +35,7 @@ export async function getRawStockProductsByPartner(partnerId: string) {
   const { data: stockData } = await supabase
     .from('inventory')
     .select(
-      'product_id, stock_raw, products!inner(id, name, product_code, color)'
+      'product_id, stock_raw, products!inner(id, name, product_code, color_text)' // DB: color_text
     )
     .eq('products.partner_id', partnerId)
     .gt('stock_raw', 0)
@@ -77,7 +77,7 @@ export async function getRawStockProductsByPartner(partnerId: string) {
       id: p.id,
       name: p.name,
       product_code: p.product_code,
-      color: p.color,
+      color_text: p.color_text, // DB: color_text
       stock_raw: item.stock_raw,
       arrivals: arrivals,
     };
@@ -91,7 +91,7 @@ export async function getProductsByPartner(partnerId: string) {
 
   const { data } = await supabase
     .from('products')
-    .select('id, name, product_code, color')
+    .select('id, name, product_code, color_text') // DB: color_text
     .eq('partner_id', partnerId)
     .eq('is_discontinued', false) // 廃盤は除外
     .order('product_code');
@@ -112,7 +112,7 @@ export async function getProductsByPartner(partnerId: string) {
     id: p.id,
     name: p.name,
     product_code: p.product_code,
-    color: p.color,
+    color_text: p.color_text,
     stock_raw: stockMap.get(p.id) || 0,
     arrivals: [], // 入荷履歴は一旦空で返す (必要なら別途取得)
   }));
@@ -125,7 +125,7 @@ export async function getDefectiveProductsByPartner(partnerId: string) {
   const { data: stockData } = await supabase
     .from('inventory')
     .select(
-      'product_id, stock_defective, products!inner(id, name, product_code, color)'
+      'product_id, stock_defective, products!inner(id, name, product_code, color_text)' // DB: color_text
     )
     .eq('products.partner_id', partnerId)
     .gt('stock_defective', 0)

@@ -35,7 +35,7 @@ export default async function ProductsPage(props: Props) {
   if (keyword) {
     // 型番、品名、色、備考のいずれかにヒットすればOK
     query = query.or(
-      `product_code.ilike.%${keyword}%,name.ilike.%${keyword}%,color.ilike.%${keyword}%,memo.ilike.%${keyword}%`
+      `product_code.ilike.%${keyword}%,name.ilike.%${keyword}%,color_text.ilike.%${keyword}%,memo.ilike.%${keyword}%`
     );
   }
 

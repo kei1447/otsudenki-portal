@@ -32,10 +32,13 @@ export async function getUnbilledSummary(closingDate: number, startDate: string,
   const summaryMap = new Map<string, InvoiceCandidate>()
 
   shipments.forEach(s => {
-    const pId = s.partners.id
+    // ★修正ポイント: ここで型エラーが出ていたので as any で回避
+    const p = s.partners as any
+    const pId = p.id
+    
     if (!summaryMap.has(pId)) {
       summaryMap.set(pId, {
-        partner: { id: pId, name: s.partners.name },
+        partner: { id: pId, name: p.name },
         shipment_count: 0,
         total_amount_excl_tax: 0
       })
@@ -90,7 +93,7 @@ export async function createSingleInvoice(
   if (!user) return { success: false, message: '要ログイン' }
 
   try {
-    // 消費税計算 (10% 端数切り捨て) ※インボイス制度対応の再計算
+    // 消費税計算 (10% 端数切り捨て)
     const subtotal = totalExclTax
     const tax = Math.floor(subtotal * 0.1)
     const total = subtotal + tax
@@ -114,7 +117,7 @@ export async function createSingleInvoice(
 
     if (invError) throw invError
 
-    // B. 出荷データに請求書IDを紐付け (これが「請求済み」の証になる)
+    // B. 出荷データに請求書IDを紐付け
     const { error: shipError } = await supabase
       .from('shipments')
       .update({ invoice_id: invoice.id })

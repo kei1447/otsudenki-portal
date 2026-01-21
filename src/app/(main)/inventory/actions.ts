@@ -79,9 +79,42 @@ export async function getRawStockProductsByPartner(partnerId: string) {
       product_code: p.product_code,
       color: p.color,
       stock_raw: item.stock_raw,
-      arrivals: arrivals,
     };
   });
+}
+
+// 追加: 取引先に紐づく全製品情報 (在庫0でも受入候補として表示するため)
+// 戻り値の型は getRawStockProductsByPartner と揃える (在庫0とする)
+export async function getProductsByPartner(partnerId: string) {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from('products')
+    .select('id, name, product_code, color')
+    .eq('partner_id', partnerId)
+    .eq('is_discontinued', false) // 廃盤は除外
+    .order('product_code');
+
+  if (!data) return [];
+
+  // 現在の在庫数を一括取得
+  const productIds = data.map((p) => p.id);
+  const { data: stockData } = await supabase
+    .from('inventory')
+    .select('product_id, stock_raw')
+    .in('product_id', productIds);
+
+  const stockMap = new Map();
+  stockData?.forEach((s) => stockMap.set(s.product_id, s.stock_raw));
+
+  return data.map((p) => ({
+    id: p.id,
+    name: p.name,
+    product_code: p.product_code,
+    color: p.color,
+    stock_raw: stockMap.get(p.id) || 0,
+    arrivals: [], // 入荷履歴は一旦空で返す (必要なら別途取得)
+  }));
 }
 
 // 共通: 不良在庫がある製品 ＋ 詳細
@@ -153,17 +186,7 @@ export async function getDefectiveProductsByPartner(partnerId: string) {
   });
 }
 
-// 共通: 特定取引先の製品取得
-export async function getProductsByPartner(partnerId: string) {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('products')
-    .select('id, name, product_code, color')
-    .eq('partner_id', partnerId)
-    .eq('is_discontinued', false)
-    .order('product_code');
-  return data || [];
-}
+
 
 // 1. 受入登録
 export async function registerReceiving(data: {

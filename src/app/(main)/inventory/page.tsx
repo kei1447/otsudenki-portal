@@ -8,6 +8,7 @@ import {
   getRawStockProductsByPartner,
   getDefectiveProductsByPartner,
   getAllInventory,
+  getProductsByPartner,
 } from './actions';
 
 // 取引先型定義

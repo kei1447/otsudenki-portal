@@ -40,14 +40,15 @@ export async function createPartner(formData: FormData) {
 }
 
 // 取引先更新 (ここがエラーの原因でした)
+// 取引先更新
 export async function updatePartner(id: string, formData: FormData) {
   const supabase = await createClient();
 
   const name = formData.get('name') as string;
   const code = formData.get('code') as string;
-  const address = formData.get('address') as string;
-  const phone = formData.get('phone') as string;
-  const memo = formData.get('memo') as string;
+  const address = formData.get('address') as string || ''; // null対策
+  const phone = formData.get('phone') as string || '';
+  const memo = formData.get('memo') as string || '';
   const closingDate = Number(formData.get('closing_date') || 99);
 
   try {

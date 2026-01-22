@@ -16,16 +16,16 @@ type SortConfig = {
 };
 
 const ALL_COLUMNS = [
-  { key: 'product_code', label: '製品コード' },
-  { key: 'name', label: '製品名' },
-  { key: 'partner_name', label: '取引先' }, // derived
-  { key: 'color_text', label: '色・仕様' },
-  { key: 'unit_weight', label: '重量(kg)' },
-  { key: 'surface_area', label: '表面積' },
-  { key: 'material_memo', label: '材質メモ' },
-  { key: 'process_memo', label: '加工メモ' },
-  { key: 'memo', label: '備考' },
-  { key: 'is_discontinued', label: '状態' },
+  { key: 'product_code', label: '製品コード', type: 'text' },
+  { key: 'name', label: '製品名', type: 'text' },
+  { key: 'partner_name', label: '取引先', type: 'select' },
+  { key: 'color_text', label: '色・仕様', type: 'text' },
+  { key: 'unit_weight', label: '重量(kg)', type: 'number' },
+  { key: 'surface_area', label: '表面積', type: 'number' },
+  { key: 'material_memo', label: '材質メモ', type: 'text' },
+  { key: 'process_memo', label: '加工メモ', type: 'text' },
+  { key: 'memo', label: '備考', type: 'text' },
+  { key: 'is_discontinued', label: '状態', type: 'status' },
 ] as const;
 
 export default function ProductList({ initialProducts, masterPartners }: Props) {
@@ -33,19 +33,22 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
   const searchParams = useSearchParams();
 
   // --- State ---
-  const [searchQuery, setSearchQuery] = useState(
-    searchParams.get('q')?.toString() || ''
-  );
+  const [filters, setFilters] = useState<Record<string, string>>(() => {
+    const f: Record<string, string> = {};
+    ALL_COLUMNS.forEach(col => {
+      const paramKey = col.key === 'partner_name' ? 'partner_id' : col.key;
+      const val = searchParams.get(paramKey);
+      if (val) f[col.key] = val;
+    });
+    return f;
+  });
 
-  // Column Visibility
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     new Set(['product_code', 'name', 'partner_name', 'color_text', 'unit_weight', 'is_discontinued'])
   );
 
-  // Sort
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'product_code', direction: 'asc' });
 
-  // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<Partial<Product>>({});
@@ -58,27 +61,69 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
     setVisibleColumns(newSet);
   };
 
-  const handleSearch = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (searchQuery) params.set('q', searchQuery);
-    else params.delete('q');
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const applyFilters = () => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, val]) => {
+      if (val) {
+        const paramKey = key === 'partner_name' ? 'partner_id' : key;
+        params.set(paramKey, val);
+      }
+    });
     router.push(`?${params.toString()}`);
+  };
+
+  const handleClearFilters = () => {
+    setFilters({});
+    router.push('?');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      applyFilters();
+    }
   };
 
   // --- Filtering & Sorting ---
   const filteredAndSortedProducts = useMemo(() => {
     let result = [...initialProducts];
 
-    // Sorting
+    // Filter
+    Object.entries(filters).forEach(([key, val]) => {
+      if (!val) return;
+      if (!visibleColumns.has(key)) return;
+
+      if (key === 'partner_name') {
+        result = result.filter(p => String(p.partner_id) === val);
+      } else if (key === 'is_discontinued') {
+        if (val === 'true') {
+          result = result.filter(p => p.is_discontinued);
+        } else if (val === 'false') {
+          result = result.filter(p => !p.is_discontinued);
+        }
+      } else {
+        result = result.filter(p => {
+          const v = (p as any)[key];
+          return v != null && String(v).toLowerCase().includes(val.toLowerCase());
+        });
+      }
+    });
+
+    // Sort
     result.sort((a, b) => {
       let aValue: any = a[sortConfig.key as keyof Product];
       let bValue: any = b[sortConfig.key as keyof Product];
 
-      // Handle special cases
       if (sortConfig.key === 'partner_name') {
         aValue = a.partners?.name || '';
         bValue = b.partners?.name || '';
       }
+
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
 
       if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
@@ -86,7 +131,7 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
     });
 
     return result;
-  }, [initialProducts, sortConfig]);
+  }, [initialProducts, sortConfig, filters, visibleColumns]);
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -134,8 +179,8 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
     fd.set('unit_weight', String(formData.unit_weight || 0));
     fd.set('surface_area', String(formData.surface_area || 0));
     fd.set('memo', formData.memo || '');
-    fd.set('material_memo', formData.material_memo || ''); // Type error expected if Product type not updated yet
-    fd.set('process_memo', formData.process_memo || '');   // Type error expected
+    fd.set('material_memo', (formData as any).material_memo || '');
+    fd.set('process_memo', (formData as any).process_memo || '');
     fd.set('is_discontinued', String(formData.is_discontinued));
 
     const res = editingProduct
@@ -145,7 +190,7 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
     if (res.success) {
       alert(res.message);
       setIsModalOpen(false);
-      // router.refresh() handles list update
+      router.refresh();
     } else {
       alert(res.message);
     }
@@ -153,25 +198,76 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
 
   return (
     <div className="space-y-4">
-      {/* Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <div className="flex items-center gap-2 flex-1">
-          <input
-            type="text"
-            className="border p-2 rounded text-sm w-full md:w-64"
-            placeholder="検索ワード..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            onBlur={handleSearch}
-          />
-        </div>
+      {/* Dynamic Filters Area */}
+      {visibleColumns.size > 0 && (
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-sm font-bold text-gray-700">絞り込み条件 (表示項目連動)</label>
+            <div className="flex gap-2">
+              <button onClick={applyFilters} className="text-xs bg-gray-800 text-white px-3 py-1 rounded hover:bg-gray-700">検索</button>
+              <button onClick={handleClearFilters} className="text-xs bg-white border text-gray-600 px-3 py-1 rounded hover:bg-gray-50">クリア</button>
+            </div>
+          </div>
 
+          <div className="flex flex-wrap gap-3">
+            {ALL_COLUMNS.filter(col => visibleColumns.has(col.key)).map(col => {
+              if (col.key === 'partner_name') {
+                return (
+                  <div key={col.key} className="w-48">
+                    <select
+                      className="w-full border p-2 rounded text-sm"
+                      value={filters[col.key] || ''}
+                      onChange={e => handleFilterChange(col.key, e.target.value)}
+                    >
+                      <option value="">取引先: すべて</option>
+                      {masterPartners.map(mp => (
+                        <option key={mp.id} value={mp.id}>{mp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              }
+              if (col.key === 'is_discontinued') {
+                return (
+                  <div key={col.key} className="w-32">
+                    <select
+                      className="w-full border p-2 rounded text-sm"
+                      value={filters[col.key] || ''}
+                      onChange={e => handleFilterChange(col.key, e.target.value)}
+                    >
+                      <option value="">状態: すべて</option>
+                      <option value="false">稼働中</option>
+                      <option value="true">廃盤</option>
+                    </select>
+                  </div>
+                );
+              }
+              return (
+                <div key={col.key} className="w-40">
+                  <input
+                    type={col.type === 'number' ? 'number' : 'text'}
+                    className="w-full border p-2 rounded text-sm"
+                    placeholder={col.label}
+                    value={filters[col.key] || ''}
+                    onChange={e => handleFilterChange(col.key, e.target.value)}
+                    onKeyDown={handleKeyDown}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Controls & Table */}
+      <div className="flex justify-between items-center">
+        <div className="text-xs text-gray-500">
+          検索結果: {filteredAndSortedProducts.length} 件
+        </div>
         <div className="flex items-center gap-2">
-          {/* Column Selector */}
           <div className="relative group">
-            <button className="bg-white border text-sm px-3 py-2 rounded hover:bg-gray-50">
-              表示項目設定 ▼
+            <button className="bg-white border text-sm px-3 py-2 rounded hover:bg-gray-50 flex items-center gap-1">
+              表示項目設定 <span className="text-[10px]">▼</span>
             </button>
             <div className="absolute right-0 mt-2 w-48 bg-white border shadow-lg rounded p-2 hidden group-hover:block z-10">
               {ALL_COLUMNS.map((col) => (
@@ -196,7 +292,6 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
         </div>
       </div>
 
-      {/* Table */}
       <div className="bg-white shadow rounded-lg overflow-x-auto border border-gray-200">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -283,9 +378,6 @@ export default function ProductList({ initialProducts, masterPartners }: Props) 
             )}
           </tbody>
         </table>
-      </div>
-      <div className="text-right text-xs text-gray-400">
-        {filteredAndSortedProducts.length} 件表示
       </div>
 
       {/* Modal */}

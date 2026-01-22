@@ -10,7 +10,7 @@ export async function getPartners() {
     .from('partners')
     .select('*')
     .eq('is_active', true)
-    .order('code');
+    .order('partner_code');
   return data || [];
 }
 

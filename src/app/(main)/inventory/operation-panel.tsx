@@ -24,6 +24,14 @@ type ProductionProduct = Awaited<ReturnType<typeof getRawStockProductsByPartner>
 type ShipmentProduct = Awaited<ReturnType<typeof getFinishedStockProductsByPartner>>[number];
 type DefectiveProduct = Awaited<ReturnType<typeof getDefectiveProductsByPartner>>[number];
 
+const formatDateForDB = (val: string) => {
+  // YYYYMMDD -> YYYY-MM-DD
+  if (/^\d{8}$/.test(val)) {
+    return `${val.slice(0, 4)}-${val.slice(4, 6)}-${val.slice(6, 8)}`;
+  }
+  return val;
+};
+
 export default function OperationPanel({
   partnerId,
   receivingCandidates,
@@ -108,6 +116,15 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (id: number, field: 'qty' | 'date', value: string) => {
+    if (field === 'date') {
+      const cleaned = value.replace(/[^0-9]/g, '');
+      if (cleaned.length > 8) return;
+      setInputs((prev) => {
+        const current = prev[id] || { qty: '', date: '' };
+        return { ...prev, [id]: { ...current, [field]: cleaned } };
+      });
+      return;
+    }
     setInputs((prev) => {
       const current = prev[id] || { qty: '', date: '' };
       return { ...prev, [id]: { ...current, [field]: value } };
@@ -119,16 +136,19 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
       .map(([id, val]) => ({
         productId: Number(id),
         quantity: Number(val.qty),
-        dueDate: val.date || ''
+        dueDate: val.date ? formatDateForDB(val.date) : '',
       }))
       .filter((e) => e.quantity > 0);
 
     if (entries.length === 0) return alert('数量を入力してください');
 
+    const invalidDate = entries.find(e => e.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(e.dueDate));
+    if (invalidDate) return alert('日付はYYYYMMDD形式(8桁)で入力してください');
+
     const productMap = new Map(products.map(p => [p.id, p]));
     const confirmMsg = entries.map(e => {
       const p = productMap.get(e.productId);
-      return `・${p?.name}: ${e.quantity}個`;
+      return `・${p?.name}: ${e.quantity}個 (入荷日: ${e.dueDate || '指定なし'})`;
     }).join('\n');
 
     if (!confirm(`以下を一括登録しますか？\n\n${confirmMsg}`)) return;
@@ -195,10 +215,12 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
                   onChange={(e) => handleChange(p.id, 'qty', e.target.value)}
                 />
                 <input
-                  type="date"
-                  className="w-32 border p-1 rounded text-xs text-gray-500"
+                  type="text"
+                  placeholder="YYYYMMDD"
+                  className="w-32 border p-1 rounded text-xs text-gray-500 font-mono"
                   value={inputs[p.id]?.date || ''}
                   onChange={(e) => handleChange(p.id, 'date', e.target.value)}
+                  maxLength={8}
                 />
               </div>
               {/* @ts-ignore */}
@@ -521,7 +543,11 @@ function ShipmentTab({
   products: ShipmentProduct[];
 }) {
   const [inputs, setInputs] = useState<Record<number, string>>({});
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    const iso = d.toISOString().split('T')[0];
+    return iso.replace(/-/g, '');
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [history, setHistory] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -540,6 +566,11 @@ function ShipmentTab({
     setInputs((prev) => ({ ...prev, [id]: val }));
   };
 
+  const handleDateChange = (val: string) => {
+    const cleaned = val.replace(/[^0-9]/g, '');
+    if (cleaned.length <= 8) setDate(cleaned);
+  };
+
   const handleRegister = async () => {
     const items = Object.entries(inputs)
       .map(([pid, qty]) => ({ productId: Number(pid), quantity: Number(qty) }))
@@ -547,11 +578,14 @@ function ShipmentTab({
 
     if (items.length === 0) return alert('出荷数を入力してください');
 
-    if (confirm(`${items.length}品目の出荷を登録しますか？\n出荷日: ${date}`)) {
+    const formattedDate = formatDateForDB(date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(formattedDate)) return alert('日付はYYYYMMDD形式(8桁)で入力してください');
+
+    if (confirm(`${items.length}品目の出荷を登録しますか？\n出荷日: ${formattedDate}`)) {
       setIsSubmitting(true);
       const res = await registerShipment({
         partnerId,
-        shipmentDate: date,
+        shipmentDate: formattedDate,
         items,
       });
 
@@ -579,11 +613,14 @@ function ShipmentTab({
         <div className="bg-gray-50 p-4 rounded flex items-center gap-4">
           <label className="font-bold text-gray-700">出荷日:</label>
           <input
-            type="date"
+            type="text"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="border p-2 rounded"
+            onChange={(e) => handleDateChange(e.target.value)}
+            className="border p-2 rounded w-32 font-mono"
+            placeholder="YYYYMMDD"
+            maxLength={8}
           />
+          <span className="text-xs text-gray-500">※YYYYMMDD形式</span>
         </div>
 
         <InventoryTable

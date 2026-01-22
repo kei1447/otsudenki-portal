@@ -1073,3 +1073,141 @@ export async function getDashboardMetrics() {
     recentShipments: recentShipments || [],
   };
 }
+
+// 13. 在庫調整用: 取引先別の全製品在庫を取得
+export async function getInventoryForAdjustment(partnerId: string) {
+  const supabase = await createClient();
+
+  // 取引先の全製品を取得（在庫有無に関わらず）
+  const { data: products } = await supabase
+    .from('products')
+    .select('id, name, product_code, color_text, is_discontinued')
+    .eq('partner_id', partnerId)
+    .eq('is_discontinued', false)
+    .order('product_code');
+
+  if (!products || products.length === 0) return [];
+
+  const productIds = products.map((p) => p.id);
+
+  // 在庫データを取得
+  const { data: inventoryData } = await supabase
+    .from('inventory')
+    .select('product_id, stock_raw, stock_finished, stock_defective')
+    .in('product_id', productIds);
+
+  // 製品と在庫をマージ
+  return products.map((p) => {
+    const inv = inventoryData?.find((i) => i.product_id === p.id);
+    return {
+      product_id: p.id,
+      product_code: p.product_code,
+      name: p.name,
+      color_text: p.color_text,
+      stock_raw: inv?.stock_raw ?? 0,
+      stock_finished: inv?.stock_finished ?? 0,
+      stock_defective: inv?.stock_defective ?? 0,
+    };
+  });
+}
+
+// 14. 在庫調整: 在庫数を直接設定（差分を履歴に記録）
+export async function adjustInventory(
+  partnerId: string,
+  adjustments: Array<{
+    productId: number;
+    stock_raw: number;
+    stock_finished: number;
+    stock_defective: number;
+  }>,
+  reason?: string
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, message: '要ログイン' };
+
+  try {
+    for (const adj of adjustments) {
+      // 現在の在庫を取得
+      const { data: current } = await supabase
+        .from('inventory')
+        .select('stock_raw, stock_finished, stock_defective')
+        .eq('product_id', adj.productId)
+        .single();
+
+      const oldRaw = current?.stock_raw ?? 0;
+      const oldFinished = current?.stock_finished ?? 0;
+      const oldDefective = current?.stock_defective ?? 0;
+
+      const diffRaw = adj.stock_raw - oldRaw;
+      const diffFinished = adj.stock_finished - oldFinished;
+      const diffDefective = adj.stock_defective - oldDefective;
+
+      // 変更がない場合はスキップ
+      if (diffRaw === 0 && diffFinished === 0 && diffDefective === 0) continue;
+
+      // 在庫テーブルをUpsert
+      const { error: invError } = await supabase
+        .from('inventory')
+        .upsert({
+          product_id: adj.productId,
+          stock_raw: adj.stock_raw,
+          stock_finished: adj.stock_finished,
+          stock_defective: adj.stock_defective,
+          last_updated_at: new Date().toISOString(),
+        }, { onConflict: 'product_id' });
+
+      if (invError) throw invError;
+
+      // 履歴を記録 (adjustment タイプ)
+      // 部材、完成品、不良それぞれに差分があれば記録
+      const movementsToInsert = [];
+
+      if (diffRaw !== 0) {
+        movementsToInsert.push({
+          product_id: adj.productId,
+          movement_type: 'adjustment_raw',
+          quantity_change: diffRaw,
+          reason: reason || '在庫調整',
+          created_by: user.id,
+        });
+      }
+      if (diffFinished !== 0) {
+        movementsToInsert.push({
+          product_id: adj.productId,
+          movement_type: 'adjustment_finished',
+          quantity_change: diffFinished,
+          reason: reason || '在庫調整',
+          created_by: user.id,
+        });
+      }
+      if (diffDefective !== 0) {
+        movementsToInsert.push({
+          product_id: adj.productId,
+          movement_type: 'adjustment_defective',
+          quantity_change: diffDefective,
+          reason: reason || '在庫調整',
+          created_by: user.id,
+        });
+      }
+
+      if (movementsToInsert.length > 0) {
+        const { error: movError } = await supabase
+          .from('inventory_movements')
+          .insert(movementsToInsert);
+        if (movError) throw movError;
+      }
+    }
+
+    revalidatePath('/inventory');
+    return { success: true, message: `${adjustments.length}件の在庫を調整しました` };
+  } catch (e: unknown) {
+    console.error('adjustInventory error:', e);
+    return {
+      success: false,
+      message: '調整エラー: ' + (e instanceof Error ? e.message : 'Unknown error'),
+    };
+  }
+}

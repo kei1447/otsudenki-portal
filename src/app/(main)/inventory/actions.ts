@@ -463,7 +463,7 @@ export async function registerDefectiveProcessing(data: {
       // 廃棄: 在庫減のみ
       await supabase.from('inventory_movements').insert({
         product_id: productId,
-        movement_type: 'return_defective', // 既存タイプを流用、または新規追加
+        movement_type: 'return_defective',
         quantity_change: -quantity,
         reason: '社内廃棄',
         created_by: user.id,
@@ -472,8 +472,6 @@ export async function registerDefectiveProcessing(data: {
       return { success: true, message: '廃棄として在庫処分しました' };
 
     } else if (processingType === 'return_billable' || processingType === 'return_free') {
-      // 返却: 出荷データ作成
-      // 製品情報からpartner_idを取得
       const { data: product } = await supabase
         .from('products')
         .select('partner_id')
@@ -482,7 +480,6 @@ export async function registerDefectiveProcessing(data: {
 
       if (!product?.partner_id) throw new Error('取引先情報が見つかりません');
 
-      // 有償の場合は単価取得、無償は0
       let unitPrice = 0;
       if (processingType === 'return_billable') {
         const { data: price } = await supabase
@@ -497,33 +494,35 @@ export async function registerDefectiveProcessing(data: {
       }
 
       const lineTotal = unitPrice * quantity;
-
       const reason = processingType === 'return_billable' ? '有償返却(売上計上)' : '無償返却(0円出荷)';
+      const today = new Date().toISOString().split('T')[0];
 
-      // 出荷レコード作成
-      // memoカラムが存在すると仮定して追加。型エラーが出る場合は削除するが、通常標準的なカラム。
-      // また、dateではなくshipment_dateを使用。
-      const { data: shipment, error: shipError } = await supabase
+      let { data: shipment } = await supabase
         .from('shipments')
-        .insert({
-          partner_id: product.partner_id,
-          shipment_date: new Date().toISOString().split('T')[0], // date -> shipment_date
-          status: 'confirmed',
-          total_amount: lineTotal,
-          created_by: user.id,
-          // memo: reason, // memoカラムが確実でないため一旦保留、あるいはmigrationが必要？
-          // ここは安全策として、shipmentsテーブルにmemoがあるか不明なので、
-          // 既存のコードベースに合わせて insert する。
-          // もしmemoがないならエラーになる。
-          // しかしユーザー要望「分けて計上」は配送IDが別なら満たされる。
-          // 念のため、print画面で created_by (担当) などが表示されるが、
-          // 備考欄に出すには shipment_items の備考か、shipmentの備考が必要。
-          // 一旦標準的な実装として shipment_date の修正のみを行う。
-        })
-        .select()
+        .select('id, total_amount')
+        .eq('partner_id', product.partner_id)
+        .eq('shipment_date', today)
+        .eq('status', 'confirmed')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .single();
 
-      if (shipError || !shipment) throw new Error('出荷データ作成に失敗しました');
+      if (!shipment) {
+        const { data: newShipment, error: createError } = await supabase
+          .from('shipments')
+          .insert({
+            partner_id: product.partner_id,
+            shipment_date: today,
+            status: 'confirmed',
+            total_amount: 0,
+            created_by: user.id,
+          })
+          .select('id, total_amount')
+          .single();
+
+        if (createError || !newShipment) throw new Error('出荷データ作成に失敗しました');
+        shipment = newShipment;
+      }
 
       // 出荷詳細作成
       await supabase.from('shipment_items').insert({
@@ -533,6 +532,13 @@ export async function registerDefectiveProcessing(data: {
         unit_price: unitPrice,
         line_total: lineTotal,
       });
+
+      // 合計金額更新
+      const newTotal = (shipment.total_amount || 0) + lineTotal;
+      await supabase
+        .from('shipments')
+        .update({ total_amount: newTotal })
+        .eq('id', shipment.id);
 
       await supabase.from('inventory_movements').insert({
         product_id: productId,
@@ -635,7 +641,7 @@ export async function deleteMovement(movementId: string) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     return { success: false, message: msg };
   }
-}
+} // End of deleteMovement
 
 // 全体履歴取得
 export async function getGlobalHistory() {

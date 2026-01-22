@@ -858,7 +858,13 @@ function DefectiveTab({ products }: { products: DefectiveProduct[] }) {
                 <div className="text-red-600 font-bold mt-1">
                   不良在庫: {p.stock_defective}
                 </div>
-                {/* 不良理由（直近のものなどを表示できればベスト） */}
+                {p.recent_defects.length > 0 && (
+                  <div className="mt-1 text-xs text-gray-500 bg-white p-1 rounded border border-red-100">
+                    {p.recent_defects.map((d, i) => (
+                      <div key={i}>・{d.reason} ({d.date})</div>
+                    ))}
+                  </div>
+                )}
               </td>
               <td className="px-4 py-3">
                 <div className="space-y-3">

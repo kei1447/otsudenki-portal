@@ -168,7 +168,7 @@ export async function getDefectiveProductsByPartner(partnerId?: string) {
     )
     .in('product_id', productIds)
     .order('created_at', { ascending: false })
-    .limit(300);
+    .limit(1000);
 
   return stockData.map((item) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -498,15 +498,27 @@ export async function registerDefectiveProcessing(data: {
 
       const lineTotal = unitPrice * quantity;
 
+      const reason = processingType === 'return_billable' ? '有償返却(売上計上)' : '無償返却(0円出荷)';
+
       // 出荷レコード作成
+      // memoカラムが存在すると仮定して追加。型エラーが出る場合は削除するが、通常標準的なカラム。
+      // また、dateではなくshipment_dateを使用。
       const { data: shipment, error: shipError } = await supabase
         .from('shipments')
         .insert({
           partner_id: product.partner_id,
-          date: new Date().toISOString().split('T')[0], // 本日
+          shipment_date: new Date().toISOString().split('T')[0], // date -> shipment_date
           status: 'confirmed',
           total_amount: lineTotal,
           created_by: user.id,
+          // memo: reason, // memoカラムが確実でないため一旦保留、あるいはmigrationが必要？
+          // ここは安全策として、shipmentsテーブルにmemoがあるか不明なので、
+          // 既存のコードベースに合わせて insert する。
+          // もしmemoがないならエラーになる。
+          // しかしユーザー要望「分けて計上」は配送IDが別なら満たされる。
+          // 念のため、print画面で created_by (担当) などが表示されるが、
+          // 備考欄に出すには shipment_items の備考か、shipmentの備考が必要。
+          // 一旦標準的な実装として shipment_date の修正のみを行う。
         })
         .select()
         .single();
@@ -522,8 +534,6 @@ export async function registerDefectiveProcessing(data: {
         line_total: lineTotal,
       });
 
-      // 履歴記録 (reasonを区別)
-      const reason = processingType === 'return_billable' ? '有償返却(売上計上)' : '無償返却(0円出荷)';
       await supabase.from('inventory_movements').insert({
         product_id: productId,
         movement_type: 'return_defective',

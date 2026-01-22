@@ -74,6 +74,7 @@ export default function PartnersPage() {
     fd.set('partner_code', formData.partner_code ?? '');
     fd.set('address', formData.address ?? '');
     fd.set('phone', formData.phone ?? '');
+    fd.set('corporate_number', formData.corporate_number ?? '');
     fd.set('memo', formData.memo ?? '');
     fd.set('closing_date', String(formData.closing_date ?? 99));
 
@@ -240,6 +241,21 @@ export default function PartnersPage() {
 
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">
+                  法人番号
+                </label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="1234567890123"
+                  value={formData.corporate_number || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, corporate_number: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">
                   取引先名 <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -313,8 +329,9 @@ export default function PartnersPage() {
               </div>
             </form>
           </div>
-        </div>
-      )}
-    </div>
+        </div >
+      )
+      }
+    </div >
   );
 }

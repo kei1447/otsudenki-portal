@@ -9,6 +9,7 @@ export type Partner = {
   phone: string | null;
   memo: string | null;
   closing_date: number | null;
+  corporate_number?: string;
   calculation_type: string | null;
   created_at: string;
 };
@@ -24,6 +25,8 @@ export type Product = {
   memo: string | null;
   unit_weight: number | null;
   surface_area: number | null;
+  material_memo?: string | null;
+  process_memo?: string | null;
   is_discontinued: boolean;
   created_at: string;
 

@@ -27,8 +27,13 @@ export async function createProduct(formData: FormData) {
     partner_id: formData.get('partner_id'),
     name: formData.get('name'),
     product_code: formData.get('product_code'),
-    color_text: formData.get('color'), // DB: color_text
-    unit_weight: formData.get('unit_weight') || 0,
+    color_text: formData.get('color_text'),
+    unit_weight: Number(formData.get('unit_weight')) || 0,
+    surface_area: Number(formData.get('surface_area')) || 0,
+    memo: formData.get('memo'),
+    material_memo: formData.get('material_memo'),
+    process_memo: formData.get('process_memo'),
+    is_discontinued: formData.get('is_discontinued') === 'true',
   };
 
   try {
@@ -41,13 +46,34 @@ export async function createProduct(formData: FormData) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function updateProduct(id: string, formData: FormData) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const supabase = await createClient(); // ここにupdate処理が必要です
-  // 簡易実装: 今回は一覧表示でのエラーを防ぐためここまでとしますが、
-  // 必要であればupdate処理も実装します。まずはビルドを通すために必須関数だけ整備します。
-  return { success: true, message: '更新機能は準備中です' };
+  const supabase = await createClient();
+
+  const rawData = {
+    partner_id: formData.get('partner_id'),
+    name: formData.get('name'),
+    product_code: formData.get('product_code'),
+    color_text: formData.get('color_text'),
+    unit_weight: Number(formData.get('unit_weight')) || 0,
+    surface_area: Number(formData.get('surface_area')) || 0,
+    memo: formData.get('memo'),
+    material_memo: formData.get('material_memo'),
+    process_memo: formData.get('process_memo'),
+    is_discontinued: formData.get('is_discontinued') === 'true',
+  };
+
+  try {
+    const { error } = await supabase
+      .from('products')
+      .update(rawData)
+      .eq('id', id);
+
+    if (error) throw error;
+    revalidatePath('/products');
+    return { success: true, message: '更新しました' };
+  } catch (e: any) {
+    return { success: false, message: e.message };
+  }
 }
 
 export async function deleteProduct(id: string) {

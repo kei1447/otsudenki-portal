@@ -3,10 +3,14 @@
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 
-// 取引先一覧取得
+// 取引先一覧取得 (有効なもののみ)
 export async function getPartners() {
   const supabase = await createClient();
-  const { data } = await supabase.from('partners').select('*').order('code');
+  const { data } = await supabase
+    .from('partners')
+    .select('*')
+    .eq('is_active', true)
+    .order('code');
   return data || [];
 }
 
@@ -76,18 +80,22 @@ export async function updatePartner(id: string, formData: FormData) {
   }
 }
 
-// 取引先削除
+// 取引先削除 (論理削除)
 export async function deletePartner(id: string) {
   const supabase = await createClient();
   try {
-    const { error } = await supabase.from('partners').delete().eq('id', id);
+    const { error } = await supabase
+      .from('partners')
+      .update({ is_active: false })
+      .eq('id', id);
+
     if (error) throw error;
     revalidatePath('/partners');
     return { success: true, message: '削除しました' };
-  } catch {
+  } catch (e: any) {
     return {
       success: false,
-      message: '削除エラー: 関連データがある可能性があります',
+      message: `削除エラー: ${e.message}`,
     };
   }
 }

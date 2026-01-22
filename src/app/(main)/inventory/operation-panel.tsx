@@ -91,7 +91,7 @@ export default function OperationPanel({
       <div className="bg-white p-6 rounded-b-lg border border-gray-200 shadow-sm min-h-[400px]">
         {activeTab === 'receiving' && <ReceivingTab products={receivingCandidates} />}
         {activeTab === 'production' && <ProductionTab products={productionCandidates} />}
-        {activeTab === 'shipment' && <ShipmentTab partnerId={partnerId} products={shipmentCandidates} />}
+        {activeTab === 'shipment' && <ShipmentTab partnerId={partnerId} products={shipmentCandidates} defectiveCandidates={defectiveCandidates} />}
         {activeTab === 'defective' && (
           <DefectiveTab products={defectiveCandidates} />
         )}
@@ -613,12 +613,17 @@ function DefectInputRow({
 // ============================================================================
 // 3. 出荷登録タブ
 // ============================================================================
+// ============================================================================
+// 3. 出荷登録タブ
+// ============================================================================
 function ShipmentTab({
   partnerId,
-  products
+  products,
+  defectiveCandidates
 }: {
   partnerId: string;
   products: ShipmentProduct[];
+  defectiveCandidates: DefectiveProduct[];
 }) {
   const [inputs, setInputs] = useState<Record<number, string>>({});
   const [date, setDate] = useState(() => {
@@ -629,6 +634,11 @@ function ShipmentTab({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [history, setHistory] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // New States
+  const [shipmentMode, setShipmentMode] = useState<'standard' | 'defective'>('standard');
+  const [returnType, setReturnType] = useState<'return_billable' | 'return_free'>('return_billable');
+  const [reason, setReason] = useState('');
 
   // 履歴のみロード
   useEffect(() => {
@@ -651,7 +661,7 @@ function ShipmentTab({
 
   const handleRegister = async () => {
     const items = Object.entries(inputs)
-      .map(([pid, qty]) => ({ productId: Number(pid), quantity: Number(qty) }))
+      .map(([pid, qty]) => ({ productId: Number(pid), quantity: Number(qty), unitPrice: 0 }))
       .filter((i) => i.quantity > 0);
 
     if (items.length === 0) return alert('出荷数を入力してください');
@@ -659,21 +669,56 @@ function ShipmentTab({
     const formattedDate = formatDateForDB(date);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(formattedDate)) return alert('日付はYYYYMMDD形式(8桁)で入力してください');
 
-    if (confirm(`${items.length}品目の出荷を登録しますか？\n出荷日: ${formattedDate}`)) {
+    // Unit Price handling:
+    // For standard, we fetch price in action? Use 0 here and let action handle it?
+    // User wants "Price" to be consistent.
+    // registerShipment action handles price fetching inside loop for 'standard' in previous implementation?
+    // Wait, recent `registerShipment` modification REMOVED price fetching inside loop!
+    // It expects `items` to have `unitPrice`.
+    // I NEED TO FETCH UNIT PRICES HERE ??
+    // Or restore price fetching in `registerShipment`.
+    // The previous `registerShipment` had `items: { productId, quantity }[]` and fetched prices.
+    // The NEW `registerShipment` signature I wrote has `items: { ..., unitPrice }[]`.
+    // I made a mistake in `registerShipment` update if the UI doesn't fetch prices.
+    // The new `registerDefectiveProcessing` (return) fetches price.
+    // I should probably fetch prices in `registerShipment` OR fetch here.
+    // Simpler to fetch in action if efficient, but action signature requires unitPrice.
+    // Let's assume I need to fetch unit prices here (Client Side / Action Wrapper)? 
+    // No, I should fix `registerShipment` to fetch prices if 0/undefined?
+    // OR simply fetch pricing in the UI? 
+    // NO. It should be server-side logic in `registerShipment`.
+
+    // **Correction**: I will update `registerShipment` to Fetch Prices if `unitPrice` is not provided (or passed as 0).
+    // Or I'll keep the UI simple and modify `registerShipment` to accept `items: { productId, quantity }[]` again and fetch internal prices.
+    // Wait, my recent `registerShipment` implementation *requires* `unitPrice`.
+    // Let's check `actions.ts` again... I replaced it.
+    // The previous implementation fetched price.
+    // The new one (that I wrote) expects `unitPrice`.
+    // I should fix `registerShipment` in `actions.ts` to fetch prices if needed.
+    // But for this step (writing `operation-panel.tsx`), I can't change `actions.ts`.
+    // I will modify `registerShipment` in a subsequent step.
+    // For now, pass 0.
+
+    const confirmText = shipmentMode === 'standard'
+      ? `${items.length}品目の出荷を登録しますか？\n出荷日: ${formattedDate}`
+      : `${items.length}品目の不良返却(${returnType === 'return_billable' ? '有償' : '無償'})を登録しますか？\n出荷日: ${formattedDate}\n理由: ${reason || 'なし'}`;
+
+    if (confirm(confirmText)) {
       setIsSubmitting(true);
       const res = await registerShipment({
         partnerId,
-        shipmentDate: formattedDate,
-        items,
+        date: formattedDate,
+        items: items.map(i => ({ ...i, unitPrice: 0 })), // Action will need to be fixed to fetch price
+        type: shipmentMode === 'standard' ? 'standard' : returnType,
+        reason: shipmentMode === 'defective' ? reason : undefined,
       });
 
       if (res.success) {
         alert(res.message);
         setInputs({});
-        // 履歴更新
+        if (shipmentMode === 'defective') setReason('');
         const hData = await getRecentShipments(partnerId);
         setHistory(hData || []);
-        // 在庫更新反映のためリロード推奨だが、簡易的に入力をクリア
       } else {
         alert(res.message);
       }
@@ -681,13 +726,72 @@ function ShipmentTab({
     }
   };
 
+  const targetProducts = shipmentMode === 'standard' ? products : defectiveCandidates;
+
+  // Render Row for Shipment
+  const renderRow = (p: any) => {
+    const stock = shipmentMode === 'standard' ? p.stock_finished : p.stock_defective;
+    const stockLabel = shipmentMode === 'standard' ? '完成在庫' : '不良在庫';
+    const bgClass = inputs[p.id] ? (shipmentMode === 'standard' ? 'bg-green-50' : 'bg-red-50') : 'hover:bg-gray-50';
+    const ringClass = shipmentMode === 'standard' ? 'focus:ring-green-500' : 'focus:ring-red-500';
+
+    return (
+      <tr key={p.id} className={bgClass}>
+        <td className="px-4 py-3 text-sm font-mono text-gray-600">
+          {p.product_code}
+        </td>
+        <td className="px-4 py-3 text-sm font-bold text-gray-800">
+          {p.name}
+        </td>
+        <td className="px-4 py-3 text-sm text-gray-500">
+          {p.color_text}
+          <div className={`text-xs mt-1 ${shipmentMode === 'standard' ? 'text-green-600' : 'text-red-600'}`}>
+            {stockLabel}: <span className="font-bold">{stock?.toLocaleString()}</span>
+          </div>
+        </td>
+        <td className="px-4 py-2">
+          <input
+            type="number"
+            className={`w-full border p-1 rounded text-right font-bold focus:outline-none focus:ring-2 ${ringClass}`}
+            placeholder="0"
+            value={inputs[p.id] || ''}
+            onChange={(e) => handleChange(p.id, e.target.value)}
+          />
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <div className="flex flex-col lg:flex-row gap-6">
       <div className="flex-1 space-y-4">
-        <h3 className="font-bold text-gray-700 border-l-4 border-green-500 pl-3">
-          出荷データの登録
+        <h3 className={`font-bold text-gray-700 border-l-4 pl-3 ${shipmentMode === 'standard' ? 'border-green-500' : 'border-red-500'}`}>
+          出荷・返却データの登録
         </h3>
 
+        {/* Mode Selector */}
+        <div className="flex items-center gap-4 bg-gray-100 p-2 rounded">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="shipmentMode"
+              checked={shipmentMode === 'standard'}
+              onChange={() => setShipmentMode('standard')}
+            />
+            <span className="text-sm font-bold text-gray-700">通常出荷 (良品)</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="shipmentMode"
+              checked={shipmentMode === 'defective'}
+              onChange={() => setShipmentMode('defective')}
+            />
+            <span className="text-sm font-bold text-red-600">不良品返却</span>
+          </label>
+        </div>
+
+        {/* Date Input */}
         <div className="bg-gray-50 p-4 rounded flex items-center gap-4">
           <label className="font-bold text-gray-700">出荷日:</label>
           <input
@@ -701,43 +805,46 @@ function ShipmentTab({
           <span className="text-xs text-gray-500">※YYYYMMDD形式</span>
         </div>
 
+        {/* Defective Options */}
+        {shipmentMode === 'defective' && (
+          <div className="bg-red-50 p-4 rounded border border-red-100 space-y-3">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-bold text-gray-700">返却タイプ:</span>
+              <select
+                value={returnType}
+                onChange={(e) => setReturnType(e.target.value as any)}
+                className="include-border border p-1 rounded font-bold"
+              >
+                <option value="return_billable">有償返却 (売上計上)</option>
+                <option value="return_free">無償返却 (0円出荷)</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-bold text-gray-700">不良理由(備考):</span>
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="border p-1 rounded w-full text-sm"
+                placeholder="例: 表面キズ、寸法不良など (納品書に記載されます)"
+              />
+            </div>
+          </div>
+        )}
+
         <InventoryTable
-          products={products}
+          products={targetProducts}
           placeholder="製品名、品番、色で検索..."
-          renderRow={(p) => (
-            <tr key={p.id} className={inputs[p.id] ? 'bg-green-50' : 'hover:bg-gray-50'}>
-              <td className="px-4 py-3 text-sm font-mono text-gray-600">
-                {p.product_code}
-              </td>
-              <td className="px-4 py-3 text-sm font-bold text-gray-800">
-                {p.name}
-              </td>
-              <td className="px-4 py-3 text-sm text-gray-500">
-                {p.color_text}
-                <div className="text-xs text-green-600 mt-1">
-                  完成在庫: <span className="font-bold">{p.stock_finished.toLocaleString()}</span>
-                </div>
-              </td>
-              <td className="px-4 py-2">
-                <input
-                  type="number"
-                  className="w-full border p-1 rounded text-right font-bold focus:ring-2 focus:ring-green-500 focus:outline-none"
-                  placeholder="0"
-                  value={inputs[p.id] || ''}
-                  onChange={(e) => handleChange(p.id, e.target.value)}
-                />
-              </td>
-            </tr>
-          )}
+          renderRow={renderRow}
         />
 
         <div className="pt-4 text-right">
           <button
             onClick={handleRegister}
             disabled={isSubmitting}
-            className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold shadow hover:bg-green-700 disabled:opacity-50"
+            className={`px-8 py-3 rounded-lg font-bold shadow disabled:opacity-50 text-white ${shipmentMode === 'standard' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
           >
-            出荷登録する
+            {shipmentMode === 'standard' ? '出荷登録する' : '返却登録する'}
           </button>
         </div>
       </div>
@@ -778,31 +885,18 @@ function ShipmentTab({
 // 4. 不良品処理タブ
 // ============================================================================
 function DefectiveTab({ products }: { products: DefectiveProduct[] }) {
-  const [inputs, setInputs] = useState<
-    Record<number, { repair: string; other: string }>
-  >({});
+  const [inputs, setInputs] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleChange = (
-    id: number,
-    field: 'repair' | 'other',
-    value: string
-  ) => {
-    setInputs((prev) => {
-      const current = prev[id] || { repair: '', other: '' };
-      return {
-        ...prev,
-        [id]: { ...current, [field]: value },
-      };
-    });
+  const handleChange = (id: number, value: string) => {
+    setInputs((prev) => ({ ...prev, [id]: value }));
   };
 
   const handleProcess = async (
     p: DefectiveProduct,
-    type: 'repair' | 'return_billable' | 'return_free' | 'dispose'
+    type: 'repair' | 'dispose'
   ) => {
-    const inp = inputs[p.id] || { repair: '', other: '' };
-    const qty = Number(type === 'repair' ? inp.repair : inp.other);
+    const qty = Number(inputs[p.id]);
 
     if (!qty || qty <= 0) return alert('数量を入力してください');
 
@@ -810,12 +904,6 @@ function DefectiveTab({ products }: { products: DefectiveProduct[] }) {
     switch (type) {
       case 'repair':
         confirmMsg = `製品: ${p.name}\n数量: ${qty}\n\n手直し完了として良品在庫に戻しますか？`;
-        break;
-      case 'return_billable':
-        confirmMsg = `製品: ${p.name}\n数量: ${qty}\n\n有償返却として処理しますか？\n（在庫を減らし、出荷・売上データを自動作成します）`;
-        break;
-      case 'return_free':
-        confirmMsg = `製品: ${p.name}\n数量: ${qty}\n\n無償返却として処理しますか？\n（在庫を減らし、0円の出荷データを作成します）`;
         break;
       case 'dispose':
         confirmMsg = `製品: ${p.name}\n数量: ${qty}\n\n社内廃棄として処理しますか？\n（在庫のみ減算します）`;
@@ -845,17 +933,17 @@ function DefectiveTab({ products }: { products: DefectiveProduct[] }) {
     <div className="space-y-4">
       <div className="bg-red-50 p-4 rounded-md border border-red-100">
         <h3 className="font-bold text-gray-700 border-l-4 border-red-500 pl-3">
-          不良在庫の処理
+          不良在庫の処分・手直し
         </h3>
         <p className="text-sm text-gray-600 mt-2">
-          発生した不良品について、「手直しして良品にする」か「返却・廃棄する」かを登録します。
+          発生した不良品について、「手直しして良品にする」か「社内廃棄する」かを登録します。<br />
+          ※取引先への返却は「出荷タブ」から行ってください。
         </p>
       </div>
       <InventoryTable
         products={products}
         placeholder="製品名、品番、色で検索..."
         renderRow={(p) => {
-          const inp = inputs[p.id] || { repair: '', other: '' };
           return (
             <tr key={p.id} className="hover:bg-red-50">
               <td className="px-4 py-3 text-sm font-mono text-gray-600">
@@ -878,70 +966,29 @@ function DefectiveTab({ products }: { products: DefectiveProduct[] }) {
                 )}
               </td>
               <td className="px-4 py-3">
-                <div className="space-y-3">
-                  {/* 手直し行 */}
-                  <div className="flex gap-2 items-center justify-end">
-                    <label className="text-xs font-bold text-blue-600 w-16 text-right">
-                      手直しOK
-                    </label>
-                    <input
-                      type="number"
-                      className="w-20 border p-1 rounded text-right"
-                      placeholder="0"
-                      value={inp.repair}
-                      onChange={(e) => handleChange(p.id, 'repair', e.target.value)}
-                    />
+                <div className="flex gap-2 items-center justify-end">
+                  <input
+                    type="number"
+                    className="w-20 border p-1 rounded text-right font-bold"
+                    placeholder="0"
+                    value={inputs[p.id] || ''}
+                    onChange={(e) => handleChange(p.id, e.target.value)}
+                  />
+                  <div className="flex flex-col gap-1">
                     <button
                       onClick={() => handleProcess(p, 'repair')}
                       disabled={isSubmitting}
-                      className="bg-white border border-gray-300 text-gray-700 px-3 py-1 rounded text-xs hover:bg-gray-50 disabled:opacity-50"
+                      className="bg-white border border-blue-500 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-50 disabled:opacity-50"
                     >
                       良品へ
                     </button>
-                  </div>
-
-                  {/* 返却・廃棄行 */}
-                  <div className="flex gap-2 items-start justify-end">
-                    <label className="text-xs font-bold text-gray-500 w-16 text-right mt-1">
-                      返却/廃棄
-                    </label>
-                    <div className="flex flex-col gap-2 items-end">
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          className="w-20 border p-1 rounded text-right"
-                          placeholder="0"
-                          value={inp.other}
-                          onChange={(e) => handleChange(p.id, 'other', e.target.value)}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleProcess(p, 'return_billable')}
-                          disabled={isSubmitting}
-                          className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          返却(有償)
-                        </button>
-                        <button
-                          onClick={() => handleProcess(p, 'return_free')}
-                          disabled={isSubmitting}
-                          className="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600 disabled:opacity-50"
-                        >
-                          返却(無償)
-                        </button>
-                        <button
-                          onClick={() => handleProcess(p, 'dispose')}
-                          disabled={isSubmitting}
-                          className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 disabled:opacity-50"
-                        >
-                          廃棄
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-gray-400">
-                        ※有償/無償は出荷データ作成。廃棄は在庫減のみ。
-                      </p>
-                    </div>
+                    <button
+                      onClick={() => handleProcess(p, 'dispose')}
+                      disabled={isSubmitting}
+                      className="bg-white border border-red-500 text-red-600 px-3 py-1 rounded text-xs hover:bg-red-50 disabled:opacity-50"
+                    >
+                      廃棄
+                    </button>
                   </div>
                 </div>
               </td>

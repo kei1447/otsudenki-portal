@@ -111,45 +111,45 @@ export default function OperationPanel({
 // 1. 受入登録タブ
 // ============================================================================
 function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
-  const [inputs, setInputs] = useState<
-    Record<number, { qty: string; date: string }>
-  >({});
+  const [inputs, setInputs] = useState<Record<number, { qty: string; date: string; dueDate?: string }>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleChange = (id: number, field: 'qty' | 'date', value: string) => {
-    if (field === 'date') {
-      const cleaned = value.replace(/[^0-9]/g, '');
-      if (cleaned.length > 8) return;
-      setInputs((prev) => {
-        const current = prev[id] || { qty: '', date: '' };
-        return { ...prev, [id]: { ...current, [field]: cleaned } };
-      });
-      return;
-    }
-    setInputs((prev) => {
-      const current = prev[id] || { qty: '', date: '' };
-      return { ...prev, [id]: { ...current, [field]: value } };
-    });
+  const handleChange = (id: number, field: 'qty' | 'date' | 'dueDate', value: string) => {
+    setInputs((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        [field]: value,
+      },
+    }));
   };
 
   const handleBulkRegister = async () => {
-    const entries = Object.entries(inputs)
-      .map(([id, val]) => ({
-        productId: Number(id),
-        quantity: Number(val.qty),
-        dueDate: val.date ? formatDateForDB(val.date) : '',
-      }))
-      .filter((e) => e.quantity > 0);
+    const entries = products
+      .map((p) => {
+        const val = inputs[p.id];
+        if (!val || !val.qty) return null;
+        return {
+          productId: p.id,
+          quantity: parseInt(val.qty),
+          dueDate: val.dueDate ? formatDateForDB(val.dueDate) : '',
+          arrivalDate: val.date ? formatDateForDB(val.date) : '',
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null && e.quantity > 0);
 
     if (entries.length === 0) return alert('数量を入力してください');
 
-    const invalidDate = entries.find(e => e.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(e.dueDate));
+    const invalidDate = entries.find(e =>
+      (e.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(e.dueDate)) ||
+      (e.arrivalDate && !/^\d{4}-\d{2}-\d{2}$/.test(e.arrivalDate))
+    );
     if (invalidDate) return alert('日付はYYYYMMDD形式(8桁)で入力してください');
 
     const productMap = new Map(products.map(p => [p.id, p]));
     const confirmMsg = entries.map(e => {
       const p = productMap.get(e.productId);
-      return `・${p?.name}: ${e.quantity}個 (入荷日: ${e.dueDate || '指定なし'})`;
+      return `・${p?.name}: ${e.quantity}個 (入荷日: ${e.arrivalDate || '指定なし'}, 納期: ${e.dueDate || '指定なし'})`;
     }).join('\n');
 
     if (!confirm(`以下を一括登録しますか？\n\n${confirmMsg}`)) return;
@@ -217,10 +217,18 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
                 />
                 <input
                   type="text"
-                  placeholder="YYYYMMDD"
+                  placeholder="入荷日(YYYYMMDD)"
                   className="w-32 border p-1 rounded text-xs text-gray-500 font-mono"
                   value={inputs[p.id]?.date || ''}
                   onChange={(e) => handleChange(p.id, 'date', e.target.value)}
+                  maxLength={8}
+                />
+                <input
+                  type="text"
+                  placeholder="納期(YYYYMMDD)"
+                  className="w-32 border p-1 rounded text-xs text-gray-500 font-mono"
+                  value={inputs[p.id]?.dueDate || ''}
+                  onChange={(e) => handleChange(p.id, 'dueDate', e.target.value)}
                   maxLength={8}
                 />
               </div>

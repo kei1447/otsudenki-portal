@@ -221,6 +221,7 @@ export async function registerReceiving(data: {
   productId: number;
   quantity: number;
   dueDate: string;
+  arrivalDate?: string;
 }) {
   const supabase = await createClient();
   const {
@@ -234,13 +235,27 @@ export async function registerReceiving(data: {
       p_amount: data.quantity,
       p_field: 'stock_raw',
     });
-    await supabase.from('inventory_movements').insert({
+
+    // arrivalDateがあれば時刻を含める（一日の終わりにするか、現在時刻にするかは要件次第だが、通常は日付指定なら00:00 or 12:00JST）
+    // SupabaseはTimestamptz. string 'YYYY-MM-DD' を渡すと UTC 00:00 になる可能性がある。
+    // User expects JST.
+    // However, simpler is to just pass the string if it's YYYY-MM-DD, DB might interpret it.
+    // Better to append time if we want to be safe, but existing code uses `created_at` default.
+    // Let's assume input is YYYY-MM-DD.
+
+    const insertData: any = {
       product_id: data.productId,
       movement_type: 'receiving',
       quantity_change: data.quantity,
       due_date: data.dueDate,
       created_by: user.id,
-    });
+    };
+
+    if (data.arrivalDate) {
+      insertData.created_at = data.arrivalDate; // YYYY-MM-DD input, Postgres tolerates it
+    }
+
+    await supabase.from('inventory_movements').insert(insertData);
     revalidatePath('/inventory');
     return { success: true, message: '受入登録完了' };
   } catch (e: unknown) {
@@ -358,19 +373,36 @@ export async function registerShipment(data: {
   if (!data.partnerId) return { success: false, message: '取引先を指定してください' };
 
   try {
-    const { data: shipment, error: sErr } = await supabase
+    // 既存の出荷データ（納品書）があるか確認 (日付はYYYY-MM-DD前提)
+    // 通常の出荷登録は画面で日付指定されるため、その日付を使う
+    let { data: shipment } = await supabase
       .from('shipments')
-      .insert({
-        partner_id: data.partnerId,
-        shipment_date: data.shipmentDate,
-        status: 'confirmed',
-        created_by: user.id,
-      })
-      .select()
+      .select('id, total_amount')
+      .eq('partner_id', data.partnerId)
+      .eq('shipment_date', data.shipmentDate)
+      .eq('status', 'confirmed')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single();
-    if (sErr) throw sErr;
 
-    let total = 0;
+    if (!shipment) {
+      const { data: newShipment, error: sErr } = await supabase
+        .from('shipments')
+        .insert({
+          partner_id: data.partnerId,
+          shipment_date: data.shipmentDate,
+          status: 'confirmed',
+          created_by: user.id,
+          total_amount: 0,
+        })
+        .select('id, total_amount')
+        .single();
+      if (sErr) throw sErr;
+      shipment = newShipment;
+    }
+
+    let currentTotal = shipment.total_amount || 0;
+
     for (const item of data.items) {
       const { data: price } = await supabase
         .from('prices')
@@ -384,7 +416,7 @@ export async function registerShipment(data: {
 
       const unitPrice = price?.unit_price || 0;
       const lineTotal = unitPrice * item.quantity;
-      total += lineTotal;
+      currentTotal += lineTotal;
 
       await supabase.from('shipment_items').insert({
         shipment_id: shipment.id,
@@ -410,8 +442,9 @@ export async function registerShipment(data: {
 
     await supabase
       .from('shipments')
-      .update({ total_amount: total })
+      .update({ total_amount: currentTotal })
       .eq('id', shipment.id);
+
     revalidatePath('/inventory');
     return { success: true, message: '出荷登録完了' };
   } catch (e: unknown) {
@@ -704,7 +737,59 @@ export async function getShipmentForPrint(shipmentId: string) {
     .select(`*, products ( name, product_code, color_text, unit_weight )`)
     .eq('shipment_id', shipmentId)
     .order('products(product_code)');
-  return { ...shipment, items: items || [] };
+
+  if (!items) return { ...shipment, items: [], defectiveCounts: {} };
+
+  // 不良返却の内訳を取得
+  // shipment_date (YYYY-MM-DD) と一致する inventory_movements を探す
+  // JSTでの日付一致が必要だが、とりあえずUTC日付範囲で検索して JS側でフィルタリングする
+
+  const productIds = items.map(i => i.product_id);
+  const targetDateStr = shipment.shipment_date; // YYYY-MM-DD
+
+  // タイムゾーン考慮: targetDateStr の 00:00 JST から 24時間
+  const start = new Date(`${targetDateStr}T00:00:00+09:00`);
+  const end = new Date(`${targetDateStr}T23:59:59.999+09:00`);
+
+  const { data: movements } = await supabase
+    .from('inventory_movements')
+    .select('product_id, movement_type, quantity_change, created_at')
+    .in('product_id', productIds)
+    .in('movement_type', ['return_billable', 'return_free'])
+    .gte('created_at', start.toISOString())
+    .lte('created_at', end.toISOString());
+
+  const defectiveCounts: Record<number, { billable: number; free: number }> = {};
+
+  if (movements) {
+    movements.forEach(m => {
+      // movement_type は 'return_billable' | 'return_free'
+      if (!defectiveCounts[m.product_id]) {
+        defectiveCounts[m.product_id] = { billable: 0, free: 0 };
+      }
+      // quantity_changeは負の値(在庫減) OR 正? 
+      // registerDefectiveProcessing では:
+      // return_billable/free -> Stock decreases? OR increases?
+      // "Defective Return" usually means Customer sends back to Us. So Stock Increases?
+      // Wait. `registerDefectiveProcessing`:
+      // `quantity` is passed.
+      // `increment_stock` p_amount: quantity (for defective/finished?)
+      // Wait. If it's a RETURN TO FACTORY (We send back), stock decr.
+      // Defective Processing:
+      // 'repair' -> Raw decr, Defective incr.
+      // 'return_billable' -> Stock?
+      // Let's check `registerDefectiveProcessing` implementation inside `actions.ts`.
+
+      const qty = Math.abs(m.quantity_change); // use absolute just in case
+      if (m.movement_type === 'return_billable') {
+        defectiveCounts[m.product_id].billable += qty;
+      } else if (m.movement_type === 'return_free') {
+        defectiveCounts[m.product_id].free += qty;
+      }
+    });
+  }
+
+  return { ...shipment, items: items || [], defectiveCounts };
 }
 
 // 直近の出荷履歴を取得 (出荷画面表示用)

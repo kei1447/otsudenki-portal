@@ -8,6 +8,7 @@ import {
   registerDefectiveProcessing,
   getGlobalHistory,
   bulkDeleteMovements,
+  registerBulkProduction,
 } from './actions';
 import {
   getRawStockProductsByPartner,
@@ -288,7 +289,10 @@ function ProductionTab({ products }: { products: ProductionProduct[] }) {
         defects: {},
         sourceDate: '',
       };
-      const totalDefective = Object.values(newDefects).reduce((a, b) => a + b, 0);
+      const totalDefective = Object.values(newDefects).reduce(
+        (a, b) => a + b,
+        0
+      );
       return {
         ...prev,
         [productId]: {
@@ -300,60 +304,121 @@ function ProductionTab({ products }: { products: ProductionProduct[] }) {
     });
   };
 
-  const handleRegister = async (p: ProductionProduct) => {
-    const inp = inputs[p.id] || {};
-    const finished = Number(inp.finished || 0);
-    const defective = Number(inp.defective || 0);
-    const rawUsed = Number(inp.rawUsed) || finished + defective;
+  const handleBulkRegister = async () => {
+    const ids = Object.keys(inputs).map(Number);
+    if (ids.length === 0) return alert('登録するデータがありません');
 
-    if (finished + defective === 0)
-      return alert('完成数または不良数を入力してください');
+    const itemsToRegister = [];
+    const errorMessages = [];
 
-    let defectReason = '';
-    if (inp.defects && Object.keys(inp.defects).length > 0) {
-      defectReason = Object.entries(inp.defects)
-        .map(([reason, count]) => `${reason}:${count}`)
-        .join(', ');
-    }
+    for (const id of ids) {
+      const p = products.find((prod) => prod.id === id);
+      if (!p) continue;
 
-    if (
-      confirm(
-        `以下の内容で登録しますか？\n\n・製品: ${p.name}\n・良品完成: ${finished}個\n・不良発生: ${defective}個\n・生地消費: ${rawUsed}個\n${inp.sourceDate ? `・入荷日指定: ${inp.sourceDate}` : ''}`
-      )
-    ) {
-      setIsSubmitting(true);
-      const res = await registerProduction({
-        productId: p.id,
+      const inp = inputs[id];
+      const finished = Number(inp.finished || 0);
+      const defective = Number(inp.defective || 0);
+      const rawUsed = Number(inp.rawUsed) || finished + defective;
+
+      if (finished + defective === 0) continue;
+
+      // バリデーション: 入荷数チェック
+      if (inp.sourceDate) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const arrival = p.arrivals?.find((a: any) => a.value === inp.sourceDate);
+        if (arrival && typeof arrival.quantity === 'number') {
+          // 消費数(rawUsed)が入荷数を超えていないかチェック
+          if (rawUsed > arrival.quantity) {
+            errorMessages.push(`製品:${p.name} の消費数(${rawUsed})が入荷数(${arrival.quantity})を超えています`);
+            continue;
+          }
+        }
+      }
+
+      let defectReason = '';
+      if (inp.defects && Object.keys(inp.defects).length > 0) {
+        defectReason = Object.entries(inp.defects)
+          .map(([reason, count]) => `${reason}:${count}`)
+          .join(', ');
+      }
+
+      itemsToRegister.push({
+        productId: id,
         rawUsed,
         finished,
         defective,
         defectReason,
         sourceDate: inp.sourceDate,
+        productName: p.name, // 確認ダイアログ用
       });
-      alert(res.message);
-      if (res.success)
-        setInputs((prev) => {
-          const next = { ...prev };
-          delete next[p.id];
-          return next;
-        });
-      setIsSubmitting(false);
     }
+
+    if (errorMessages.length > 0) {
+      alert('【エラー】\n' + errorMessages.join('\n'));
+      return;
+    }
+
+    if (itemsToRegister.length === 0) return;
+
+    if (
+      !confirm(
+        `以下の${itemsToRegister.length}件を登録しますか？\n\n` +
+        itemsToRegister
+          .map(
+            (i) =>
+              `・${i.productName}: 完成${i.finished}/不良${i.defective} (消費${i.rawUsed})`
+          )
+          .join('\n')
+      )
+    )
+      return;
+
+    setIsSubmitting(true);
+    const res = await registerBulkProduction(itemsToRegister);
+    alert(res.message);
+    if (res.success) {
+      setInputs({});
+    }
+    setIsSubmitting(false);
   };
 
   return (
     <div className="space-y-4">
-      <h3 className="font-bold text-gray-700 border-l-4 border-blue-500 pl-3">
-        加工実績の登録
-      </h3>
+      <div className="flex justify-between items-center bg-blue-50 p-4 rounded-md border border-blue-100">
+        <div>
+          <h3 className="font-bold text-gray-700 border-l-4 border-blue-500 pl-3">
+            加工実績の登録
+          </h3>
+          <p className="text-xs text-blue-600 mt-1 pl-3">
+            入荷日を選択すると、入荷数を超える入力を防ぎます
+          </p>
+        </div>
+        <button
+          onClick={handleBulkRegister}
+          disabled={isSubmitting}
+          className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 shadow-sm"
+        >
+          一括登録
+        </button>
+      </div>
+
       <InventoryTable
         products={products}
         placeholder="製品名、品番、色で検索..."
         renderRow={(p) => {
           const inp = inputs[p.id] || {};
+          const isInputting =
+            (inp.finished && Number(inp.finished) > 0) ||
+            (inp.defective && Number(inp.defective) > 0);
+
           return (
-            <tr key={p.id} className="hover:bg-blue-50">
-              <td className="px-4 py-3 text-sm font-mono text-gray-600">{p.product_code}</td>
+            <tr
+              key={p.id}
+              className={isInputting ? 'bg-blue-50' : 'hover:bg-gray-50'}
+            >
+              <td className="px-4 py-3 text-sm font-mono text-gray-600">
+                {p.product_code}
+              </td>
               <td className="px-4 py-3 text-sm font-bold text-gray-800">
                 {p.name}
               </td>
@@ -363,7 +428,7 @@ function ProductionTab({ products }: { products: ProductionProduct[] }) {
                 {p.arrivals && p.arrivals.length > 0 && (
                   <div className="mt-1">
                     <select
-                      className="text-xs border rounded p-1 bg-white text-gray-700 w-full max-w-[150px]"
+                      className="text-xs border rounded p-1 bg-white text-gray-700 w-full max-w-[200px]"
                       value={inp.sourceDate || ''}
                       onChange={(e) =>
                         handleChange(p.id, 'sourceDate', e.target.value)
@@ -382,29 +447,30 @@ function ProductionTab({ products }: { products: ProductionProduct[] }) {
               <td className="px-4 py-3">
                 <div className="space-y-2">
                   <div className="flex gap-2 items-end">
-                    <label className="text-xs font-bold text-blue-600 w-8">良品</label>
+                    <label className="text-xs font-bold text-blue-600 w-8">
+                      良品
+                    </label>
                     <input
                       type="number"
                       className="w-20 border p-1 rounded text-right font-bold"
                       placeholder="0"
                       value={inp.finished || ''}
-                      onChange={(e) => handleChange(p.id, 'finished', e.target.value)}
+                      onChange={(e) =>
+                        handleChange(p.id, 'finished', e.target.value)
+                      }
                     />
-                    <label className="text-xs font-bold text-gray-500 w-8">消費</label>
+                    <label className="text-xs font-bold text-gray-500 w-8">
+                      消費
+                    </label>
                     <input
                       type="number"
                       className="w-16 border p-1 rounded text-right bg-gray-100 text-xs"
                       placeholder="自動"
                       value={inp.rawUsed || ''}
-                      onChange={(e) => handleChange(p.id, 'rawUsed', e.target.value)}
+                      onChange={(e) =>
+                        handleChange(p.id, 'rawUsed', e.target.value)
+                      }
                     />
-                    <button
-                      onClick={() => handleRegister(p)}
-                      disabled={isSubmitting}
-                      className="ml-2 bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      登録
-                    </button>
                   </div>
                   <div className="flex gap-2 items-center">
                     <DefectInputRow
@@ -416,9 +482,19 @@ function ProductionTab({ products }: { products: ProductionProduct[] }) {
                 </div>
               </td>
             </tr>
-          )
+          );
         }}
       />
+
+      <div className="text-right pt-2 border-t mt-4">
+        <button
+          onClick={handleBulkRegister}
+          disabled={isSubmitting}
+          className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 shadow-lg"
+        >
+          加工実績を一括登録
+        </button>
+      </div>
     </div>
   );
 }

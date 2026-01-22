@@ -12,7 +12,7 @@ type InventoryItem = {
   products: {
     name: string;
     product_code: string;
-    color: string | null;
+    color_text: string | null;
     partners: { name: string } | null;
   } | null;
 };
@@ -175,7 +175,7 @@ function InventoryAccordion({
                   <td className="px-6 py-3 text-sm text-gray-600">
                     {item.products?.name}{' '}
                     <span className="text-xs text-gray-400">
-                      {item.products?.color}
+                      {item.products?.color_text}
                     </span>
                   </td>
                   <td className="px-6 py-3 text-right text-sm font-bold bg-yellow-50/30">

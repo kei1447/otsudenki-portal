@@ -83,6 +83,7 @@ export async function getRawStockProductsByPartner(partnerId?: string) {
           return {
             label: `${date}${due} : ${m.quantity_change}個入荷`,
             value: new Date(m.created_at).toISOString().split('T')[0],
+            quantity: m.quantity_change,
           };
         }) || [];
 
@@ -316,6 +317,33 @@ export async function registerProduction(data: {
   }
 }
 
+// 2.5 加工実績一括登録
+export async function registerBulkProduction(
+  items: {
+    productId: number;
+    rawUsed: number;
+    finished: number;
+    defective: number;
+    defectReason?: string;
+    sourceDate?: string;
+  }[]
+) {
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (const item of items) {
+    const res = await registerProduction(item);
+    if (res.success) successCount++;
+    else errorCount++;
+  }
+
+  revalidatePath('/inventory');
+  return {
+    success: true,
+    message: `${successCount}件の登録に成功しました${errorCount > 0 ? ` (${errorCount}件失敗)` : ''}`,
+  };
+}
+
 // 3. 出荷登録
 export async function registerShipment(data: {
   partnerId: string;
@@ -534,7 +562,7 @@ export async function getGlobalHistory() {
   const supabase = await createClient();
   const { data } = await supabase
     .from('inventory_movements')
-    .select(`*, products ( name, product_code, color, partners ( name ) )`)
+    .select(`*, products ( name, product_code, color_text, partners ( name ) )`)
     .order('created_at', { ascending: false })
     .limit(50);
   return data || [];
@@ -583,7 +611,7 @@ export async function getShipmentForPrint(shipmentId: string) {
   if (!shipment) return null;
   const { data: items } = await supabase
     .from('shipment_items')
-    .select(`*, products ( name, product_code, color, unit_weight )`)
+    .select(`*, products ( name, product_code, color_text, unit_weight )`)
     .eq('shipment_id', shipmentId)
     .order('products(product_code)');
   return { ...shipment, items: items || [] };
@@ -714,7 +742,7 @@ export async function getUnbilledShipments(
     .select(
       `
       id, shipment_date, delivery_note_number, total_amount,
-      shipment_items ( id, quantity, unit_price, line_total, products ( name, product_code, color ) ),
+      shipment_items ( id, quantity, unit_price, line_total, products ( name, product_code, color_text ) ),
       partners ( name )
     `
     )
@@ -799,7 +827,7 @@ export async function getAllInventory() {
         id,
         name,
         product_code,
-        color,
+        color_text,
         partners ( name )
       )
     `
@@ -821,7 +849,7 @@ export async function getAllInventory() {
         products: {
           name: p.name,
           product_code: p.product_code,
-          color: p.color,
+          color_text: p.color_text,
           partners: partner,
         },
       };

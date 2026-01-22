@@ -43,7 +43,7 @@ export default function PartnerSelector({ partners, selectedPartnerId }: Props) 
                 value={selectedPartnerId || ''}
                 onChange={(e) => handleChange(e.target.value)}
             >
-                <option value="">取引先を選択してください</option>
+                <option value="">すべての取引先</option>
                 {partners.map((p) => (
                     <option key={p.id} value={p.id}>
                         {p.name}

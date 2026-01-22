@@ -5,14 +5,21 @@ import { revalidatePath } from 'next/cache';
 
 // 共通: 在庫がある製品のみ取得
 // 共通: 完成と在庫がある製品のみ取得 (出荷登録用)
-export async function getFinishedStockProductsByPartner(partnerId: string) {
+// 共通: 在庫がある製品のみ取得
+// 共通: 完成と在庫がある製品のみ取得 (出荷登録用)
+export async function getFinishedStockProductsByPartner(partnerId?: string) {
   const supabase = await createClient();
-  const { data } = await supabase
+  let query = supabase
     .from('inventory')
-    .select('stock_finished, products!inner(id, name, product_code, color_text)')
-    .eq('products.partner_id', partnerId)
+    .select('stock_finished, products!inner(id, name, product_code, color_text, partner_id)')
     .gt('stock_finished', 0)
     .order('products(product_code)');
+
+  if (partnerId) {
+    query = query.eq('products.partner_id', partnerId);
+  }
+
+  const { data } = await query;
 
   return (
     data?.map((d) => {
@@ -30,17 +37,22 @@ export async function getFinishedStockProductsByPartner(partnerId: string) {
 }
 
 // 共通: 生地在庫がある製品 ＋ 入荷履歴リスト を取得
-export async function getRawStockProductsByPartner(partnerId: string) {
+export async function getRawStockProductsByPartner(partnerId?: string) {
   const supabase = await createClient();
 
-  const { data: stockData } = await supabase
+  let query = supabase
     .from('inventory')
     .select(
-      'product_id, stock_raw, products!inner(id, name, product_code, color_text)' // DB: color_text
+      'product_id, stock_raw, products!inner(id, name, product_code, color_text, partner_id)'
     )
-    .eq('products.partner_id', partnerId)
     .gt('stock_raw', 0)
     .order('products(product_code)');
+
+  if (partnerId) {
+    query = query.eq('products.partner_id', partnerId);
+  }
+
+  const { data: stockData } = await query;
 
   if (!stockData || stockData.length === 0) return [];
 
@@ -78,7 +90,7 @@ export async function getRawStockProductsByPartner(partnerId: string) {
       id: p.id,
       name: p.name,
       product_code: p.product_code,
-      color_text: p.color_text, // DB: color_text
+      color_text: p.color_text,
       stock_raw: item.stock_raw,
       arrivals: arrivals,
     };
@@ -87,20 +99,28 @@ export async function getRawStockProductsByPartner(partnerId: string) {
 
 // 追加: 取引先に紐づく全製品情報 (在庫0でも受入候補として表示するため)
 // 戻り値の型は getRawStockProductsByPartner と揃える (在庫0とする)
-export async function getProductsByPartner(partnerId: string) {
+export async function getProductsByPartner(partnerId?: string) {
   const supabase = await createClient();
 
-  const { data } = await supabase
+  let query = supabase
     .from('products')
-    .select('id, name, product_code, color_text') // DB: color_text
-    .eq('partner_id', partnerId)
-    .eq('is_discontinued', false) // 廃盤は除外
+    .select('id, name, product_code, color_text')
+    .eq('is_discontinued', false)
     .order('product_code');
+
+  if (partnerId) {
+    query = query.eq('partner_id', partnerId);
+  }
+
+  const { data } = await query;
 
   if (!data) return [];
 
   // 現在の在庫数を一括取得
   const productIds = data.map((p) => p.id);
+  // Empty check
+  if (productIds.length === 0) return [];
+
   const { data: stockData } = await supabase
     .from('inventory')
     .select('product_id, stock_raw')
@@ -115,22 +135,27 @@ export async function getProductsByPartner(partnerId: string) {
     product_code: p.product_code,
     color_text: p.color_text,
     stock_raw: stockMap.get(p.id) || 0,
-    arrivals: [] as { label: string; value: string }[], // 入荷履歴は一旦空で返す (必要なら別途取得)
+    arrivals: [] as { label: string; value: string }[],
   }));
 }
 
 // 共通: 不良在庫がある製品 ＋ 詳細
-export async function getDefectiveProductsByPartner(partnerId: string) {
+export async function getDefectiveProductsByPartner(partnerId?: string) {
   const supabase = await createClient();
 
-  const { data: stockData } = await supabase
+  let query = supabase
     .from('inventory')
     .select(
-      'product_id, stock_defective, products!inner(id, name, product_code, color_text)' // DB: color_text
+      'product_id, stock_defective, products!inner(id, name, product_code, color_text, partner_id)'
     )
-    .eq('products.partner_id', partnerId)
     .gt('stock_defective', 0)
     .order('products(product_code)');
+
+  if (partnerId) {
+    query = query.eq('products.partner_id', partnerId);
+  }
+
+  const { data: stockData } = await query;
 
   if (!stockData || stockData.length === 0) return [];
 

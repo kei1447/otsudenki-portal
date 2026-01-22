@@ -37,8 +37,17 @@ export async function createProduct(formData: FormData) {
   };
 
   try {
-    const { error } = await supabase.from('products').insert(rawData);
+    const { data: product, error } = await supabase.from('products').insert(rawData).select().single();
     if (error) throw error;
+
+    // Initialize inventory
+    await supabase.from('inventory').insert({
+      product_id: product.id,
+      stock_raw: 0,
+      stock_finished: 0,
+      stock_defective: 0
+    });
+
     revalidatePath('/products');
     return { success: true, message: '登録しました' };
   } catch (e: any) {

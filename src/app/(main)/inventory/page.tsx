@@ -40,10 +40,10 @@ export default async function InventoryPage(props: Props) {
     productsDefective
   ] = await Promise.all([
     getAllInventory(), // 下段の全在庫リスト用
-    partnerId ? getProductsByPartner(partnerId) : Promise.resolve([]),
-    partnerId ? getRawStockProductsByPartner(partnerId) : Promise.resolve([]),
-    partnerId ? getFinishedStockProductsByPartner(partnerId) : Promise.resolve([]),
-    partnerId ? getDefectiveProductsByPartner(partnerId) : Promise.resolve([]),
+    getProductsByPartner(partnerId),
+    getRawStockProductsByPartner(partnerId),
+    getFinishedStockProductsByPartner(partnerId),
+    getDefectiveProductsByPartner(partnerId),
   ]);
 
   return (
@@ -62,19 +62,13 @@ export default async function InventoryPage(props: Props) {
 
       {/* 1. 操作パネル (受入・加工・出荷など) */}
       <div className="bg-white shadow rounded-lg p-6 border border-gray-200">
-        {!partnerId ? (
-          <div className="text-center text-gray-400 py-8">
-            取引先を選択してください
-          </div>
-        ) : (
-          <OperationPanel
-            partnerId={partnerId}
-            receivingCandidates={productsAll}
-            productionCandidates={productsRaw}
-            shipmentCandidates={productsFinished}
-            defectiveCandidates={productsDefective}
-          />
-        )}
+        <OperationPanel
+          partnerId={partnerId}
+          receivingCandidates={productsAll}
+          productionCandidates={productsRaw}
+          shipmentCandidates={productsFinished}
+          defectiveCandidates={productsDefective}
+        />
       </div>
 
       {/* 2. 在庫一覧リスト (下部) */}

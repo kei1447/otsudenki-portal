@@ -771,113 +771,166 @@ function ShipmentTab({
 // ============================================================================
 function DefectiveTab({ products }: { products: DefectiveProduct[] }) {
   const [inputs, setInputs] = useState<
-    Record<number, { rework: string; return: string }>
+    Record<number, { repair: string; other: string }>
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (
     id: number,
-    field: 'rework' | 'return',
+    field: 'repair' | 'other',
     value: string
   ) => {
-    setInputs((prev) => {
-      const current = prev[id] || { rework: '', return: '' };
-      return { ...prev, [id]: { ...current, [field]: value } };
-    });
+    setInputs((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value },
+    }));
   };
 
-  const handleRegister = async (p: DefectiveProduct) => {
-    const inp = inputs[p.id] || { rework: '0', return: '0' };
-    const rework = Number(inp.rework || 0);
-    const ret = Number(inp.return || 0);
+  const handleProcess = async (
+    p: DefectiveProduct,
+    type: 'repair' | 'return_billable' | 'return_free' | 'dispose'
+  ) => {
+    const inp = inputs[p.id] || { repair: '', other: '' };
+    const qty = Number(type === 'repair' ? inp.repair : inp.other);
 
-    if (rework + ret === 0) return alert('数量を入力してください');
-    if (
-      confirm(
-        `処理を実行しますか？\n\n・手直し良品化: ${rework}個\n・不良品返却: ${ret}個`
-      )
-    ) {
-      setIsSubmitting(true);
-      const res = await registerDefectiveProcessing({
-        productId: p.id,
-        reworkQty: rework,
-        returnQty: ret,
-      });
-      alert(res.message);
-      if (res.success)
-        setInputs((prev) => ({ ...prev, [p.id]: { rework: '', return: '' } }));
-      setIsSubmitting(false);
+    if (!qty || qty <= 0) return alert('数量を入力してください');
+
+    let confirmMsg = '';
+    switch (type) {
+      case 'repair':
+        confirmMsg = `製品: ${p.name}\n数量: ${qty}\n\n手直し完了として良品在庫に戻しますか？`;
+        break;
+      case 'return_billable':
+        confirmMsg = `製品: ${p.name}\n数量: ${qty}\n\n有償返却として処理しますか？\n（在庫を減らし、出荷・売上データを自動作成します）`;
+        break;
+      case 'return_free':
+        confirmMsg = `製品: ${p.name}\n数量: ${qty}\n\n無償返却として処理しますか？\n（在庫を減らし、0円の出荷データを作成します）`;
+        break;
+      case 'dispose':
+        confirmMsg = `製品: ${p.name}\n数量: ${qty}\n\n社内廃棄として処理しますか？\n（在庫のみ減算します）`;
+        break;
     }
+
+    if (!confirm(confirmMsg)) return;
+
+    setIsSubmitting(true);
+    const res = await registerDefectiveProcessing({
+      productId: p.id,
+      quantity: qty,
+      processingType: type,
+    });
+    alert(res.message);
+    if (res.success) {
+      setInputs((prev) => {
+        const next = { ...prev };
+        delete next[p.id];
+        return next;
+      });
+    }
+    setIsSubmitting(false);
   };
 
   return (
     <div className="space-y-4">
-      <h3 className="font-bold text-gray-700 border-l-4 border-red-500 pl-3">
-        不良在庫の処理
-      </h3>
-      <p className="text-sm text-gray-500">
-        発生した不良品について、「手直しして良品にする」か「客先へ返却(廃棄)する」かを登録します。
-      </p>
-
+      <div className="bg-red-50 p-4 rounded-md border border-red-100">
+        <h3 className="font-bold text-gray-700 border-l-4 border-red-500 pl-3">
+          不良在庫の処理
+        </h3>
+        <p className="text-sm text-gray-600 mt-2">
+          発生した不良品について、「手直しして良品にする」か「返却・廃棄する」かを登録します。
+        </p>
+      </div>
       <InventoryTable
         products={products}
         placeholder="製品名、品番、色で検索..."
-        renderRow={(p) => (
-          <tr key={p.id} className="hover:bg-red-50">
-            <td className="px-4 py-3 text-sm font-mono text-gray-600">{p.product_code}</td>
-            <td className="px-4 py-3 text-sm font-bold text-gray-800">{p.name}</td>
-            <td className="px-4 py-3 text-sm text-gray-500">
-              {p.color_text}
-              <div className="text-xs text-red-600 mt-1">
-                不良在庫: <span className="font-bold">{p.stock_defective.toLocaleString()}</span>
-              </div>
-            </td>
-            <td className="px-4 py-3">
-              <div className="space-y-2">
-                <div className="flex gap-2 items-center">
-                  <span className="text-xs font-bold w-16 text-blue-600">手直しOK</span>
-                  <input
-                    type="number"
-                    placeholder="良品へ"
-                    className="w-20 border p-1 rounded text-right text-sm"
-                    value={inputs[p.id]?.rework || ''}
-                    onChange={(e) => handleChange(p.id, 'rework', e.target.value)}
-                  />
+        renderRow={(p) => {
+          const inp = inputs[p.id] || { repair: '', other: '' };
+          return (
+            <tr key={p.id} className="hover:bg-red-50">
+              <td className="px-4 py-3 text-sm font-mono text-gray-600">
+                {p.product_code}
+              </td>
+              <td className="px-4 py-3 text-sm font-bold text-gray-800">
+                {p.name}
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-500">
+                {p.color_text}
+                <div className="text-red-600 font-bold mt-1">
+                  不良在庫: {p.stock_defective}
                 </div>
-                <div className="flex gap-2 items-center">
-                  <span className="text-xs font-bold w-16 text-gray-500">返却/廃棄</span>
-                  <input
-                    type="number"
-                    placeholder="在庫減"
-                    className="w-20 border p-1 rounded text-right text-sm"
-                    value={inputs[p.id]?.return || ''}
-                    onChange={(e) => handleChange(p.id, 'return', e.target.value)}
-                  />
-                  <button
-                    onClick={() => handleRegister(p)}
-                    disabled={isSubmitting}
-                    className="ml-2 bg-red-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-600 disabled:opacity-50"
-                  >
-                    処理登録
-                  </button>
+                {/* 不良理由（直近のものなどを表示できればベスト） */}
+              </td>
+              <td className="px-4 py-3">
+                <div className="space-y-3">
+                  {/* 手直し行 */}
+                  <div className="flex gap-2 items-center justify-end">
+                    <label className="text-xs font-bold text-blue-600 w-16 text-right">
+                      手直しOK
+                    </label>
+                    <input
+                      type="number"
+                      className="w-20 border p-1 rounded text-right"
+                      placeholder="0"
+                      value={inp.repair}
+                      onChange={(e) => handleChange(p.id, 'repair', e.target.value)}
+                    />
+                    <button
+                      onClick={() => handleProcess(p, 'repair')}
+                      disabled={isSubmitting}
+                      className="bg-white border border-gray-300 text-gray-700 px-3 py-1 rounded text-xs hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      良品へ
+                    </button>
+                  </div>
+
+                  {/* 返却・廃棄行 */}
+                  <div className="flex gap-2 items-start justify-end">
+                    <label className="text-xs font-bold text-gray-500 w-16 text-right mt-1">
+                      返却/廃棄
+                    </label>
+                    <div className="flex flex-col gap-2 items-end">
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          className="w-20 border p-1 rounded text-right"
+                          placeholder="0"
+                          value={inp.other}
+                          onChange={(e) => handleChange(p.id, 'other', e.target.value)}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleProcess(p, 'return_billable')}
+                          disabled={isSubmitting}
+                          className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          返却(有償)
+                        </button>
+                        <button
+                          onClick={() => handleProcess(p, 'return_free')}
+                          disabled={isSubmitting}
+                          className="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600 disabled:opacity-50"
+                        >
+                          返却(無償)
+                        </button>
+                        <button
+                          onClick={() => handleProcess(p, 'dispose')}
+                          disabled={isSubmitting}
+                          className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 disabled:opacity-50"
+                        >
+                          廃棄
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-gray-400">
+                        ※有償/無償は出荷データ作成。廃棄は在庫減のみ。
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              {/* 直近の不良理由 */}
-              {p.recent_defects.length > 0 && (
-                <div className="mt-2 text-xs bg-white/50 p-2 rounded border border-red-100">
-                  <p className="font-bold text-gray-500 mb-1">
-                    最近の不良理由:
-                  </p>
-                  {p.recent_defects.map((d, i) => (
-                    <span key={i} className="text-gray-600 block">
-                      ・{d.reason} ({d.date})
-                    </span>
-                  ))}
-                </div>
-              )}
-            </td>
-          </tr>
-        )}
+              </td>
+            </tr>
+          );
+        }}
       />
     </div>
   );

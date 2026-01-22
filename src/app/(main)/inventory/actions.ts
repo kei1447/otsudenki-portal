@@ -422,8 +422,8 @@ export async function registerShipment(data: {
 // 4. 不良品処理
 export async function registerDefectiveProcessing(data: {
   productId: number;
-  reworkQty: number;
-  returnQty: number;
+  quantity: number;
+  processingType: 'repair' | 'return_billable' | 'return_free' | 'dispose';
 }) {
   const supabase = await createClient();
   const {
@@ -432,41 +432,111 @@ export async function registerDefectiveProcessing(data: {
   if (!user) return { success: false, message: '要ログイン' };
 
   try {
-    if (data.reworkQty > 0) {
+    const { productId, quantity, processingType } = data;
+    if (quantity <= 0) return { success: false, message: '数量は1以上で指定してください' };
+
+    // 共通: 不良在庫を減らす
+    await supabase.rpc('increment_stock', {
+      p_product_id: productId,
+      p_amount: -quantity,
+      p_field: 'stock_defective',
+    });
+
+    if (processingType === 'repair') {
+      // 良品化: 良品在庫を増やす
       await supabase.rpc('increment_stock', {
-        p_product_id: data.productId,
-        p_amount: -data.reworkQty,
-        p_field: 'stock_defective',
-      });
-      await supabase.rpc('increment_stock', {
-        p_product_id: data.productId,
-        p_amount: data.reworkQty,
+        p_product_id: productId,
+        p_amount: quantity,
         p_field: 'stock_finished',
       });
       await supabase.from('inventory_movements').insert({
-        product_id: data.productId,
+        product_id: productId,
         movement_type: 'repair',
-        quantity_change: data.reworkQty,
+        quantity_change: quantity,
         reason: '不良手直し完了',
         created_by: user.id,
       });
-    }
-    if (data.returnQty > 0) {
-      await supabase.rpc('increment_stock', {
-        p_product_id: data.productId,
-        p_amount: -data.returnQty,
-        p_field: 'stock_defective',
-      });
+      revalidatePath('/inventory');
+      return { success: true, message: '手直し完了として在庫移動しました' };
+
+    } else if (processingType === 'dispose') {
+      // 廃棄: 在庫減のみ
       await supabase.from('inventory_movements').insert({
-        product_id: data.productId,
-        movement_type: 'return_defective',
-        quantity_change: -data.returnQty,
-        reason: '不良品返却',
+        product_id: productId,
+        movement_type: 'return_defective', // 既存タイプを流用、または新規追加
+        quantity_change: -quantity,
+        reason: '社内廃棄',
         created_by: user.id,
       });
+      revalidatePath('/inventory');
+      return { success: true, message: '廃棄として在庫処分しました' };
+
+    } else if (processingType === 'return_billable' || processingType === 'return_free') {
+      // 返却: 出荷データ作成
+      // 製品情報からpartner_idを取得
+      const { data: product } = await supabase
+        .from('products')
+        .select('partner_id')
+        .eq('id', productId)
+        .single();
+
+      if (!product?.partner_id) throw new Error('取引先情報が見つかりません');
+
+      // 有償の場合は単価取得、無償は0
+      let unitPrice = 0;
+      if (processingType === 'return_billable') {
+        const { data: price } = await supabase
+          .from('prices')
+          .select('unit_price')
+          .eq('product_id', productId)
+          .lte('valid_from', new Date().toISOString())
+          .order('valid_from', { ascending: false })
+          .limit(1)
+          .single();
+        unitPrice = price?.unit_price || 0;
+      }
+
+      const lineTotal = unitPrice * quantity;
+
+      // 出荷レコード作成
+      const { data: shipment, error: shipError } = await supabase
+        .from('shipments')
+        .insert({
+          partner_id: product.partner_id,
+          date: new Date().toISOString().split('T')[0], // 本日
+          status: 'confirmed',
+          total_amount: lineTotal,
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (shipError || !shipment) throw new Error('出荷データ作成に失敗しました');
+
+      // 出荷詳細作成
+      await supabase.from('shipment_items').insert({
+        shipment_id: shipment.id,
+        product_id: productId,
+        quantity: quantity,
+        unit_price: unitPrice,
+        line_total: lineTotal,
+      });
+
+      // 履歴記録 (reasonを区別)
+      const reason = processingType === 'return_billable' ? '有償返却(売上計上)' : '無償返却(0円出荷)';
+      await supabase.from('inventory_movements').insert({
+        product_id: productId,
+        movement_type: 'return_defective',
+        quantity_change: -quantity,
+        reason: reason,
+        created_by: user.id,
+      });
+
+      revalidatePath('/inventory');
+      return { success: true, message: `${reason}として処理しました` };
     }
-    revalidatePath('/inventory');
-    return { success: true, message: '処理完了' };
+
+    return { success: false, message: '不明な処理タイプです' };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     return { success: false, message: msg };

@@ -998,3 +998,78 @@ export async function getAllInventory() {
     }) || []
   );
 }
+
+// 12. ダッシュボード用データ取得
+export async function getDashboardMetrics() {
+  const supabase = await createClient();
+
+  // 今日の日付 (JST)
+  const now = new Date();
+  const today = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+  const yyyyMm = today.substring(0, 7); // YYYY-MM
+
+  // 1. 今日の出荷実績
+  const { data: todayShipments } = await supabase
+    .from('shipments')
+    .select('id, total_amount')
+    .eq('status', 'confirmed')
+    .eq('shipment_date', today);
+
+  const todayCount = todayShipments?.length || 0;
+  const todayAmount = todayShipments?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
+
+  // 2. 今月の出荷売上 (簡易集計)
+  const { data: monthShipments } = await supabase
+    .from('shipments')
+    .select('total_amount')
+    .eq('status', 'confirmed')
+    .like('shipment_date', `${yyyyMm}%`);
+
+  const monthAmount = monthShipments?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
+
+  // 3. 最近のアクティビティ (Movement)
+  const { data: recentMovements } = await supabase
+    .from('inventory_movements')
+    .select(`
+      id,
+      created_at,
+      movement_type,
+      quantity_change,
+      reason,
+      products (
+        name,
+        product_code
+      )
+    `)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  // 4. 最近の出荷 (Shipment)
+  const { data: recentShipments } = await supabase
+    .from('shipments')
+    .select(`
+      id,
+      shipment_date,
+      total_amount,
+      partners (
+        name
+      )
+    `)
+    .eq('status', 'confirmed')
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  return {
+    today: {
+      date: today,
+      count: todayCount,
+      amount: todayAmount,
+    },
+    month: {
+      yyyymm: yyyyMm,
+      amount: monthAmount,
+    },
+    recentMovements: recentMovements || [],
+    recentShipments: recentShipments || [],
+  };
+}

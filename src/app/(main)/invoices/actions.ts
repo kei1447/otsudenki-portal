@@ -80,7 +80,7 @@ export async function getUnbilledShipments(
         quantity,
         unit_price,
         line_total,
-        products ( name, product_code, color )
+        products ( name, product_code, color_text )
       ),
       partners ( name )
     `

@@ -19,7 +19,8 @@ export async function createPartner(formData: FormData) {
   const supabase = await createClient();
 
   const name = formData.get('name') as string;
-  const code = formData.get('code') as string;
+  const partnerCode = formData.get('partner_code') as string;
+  const corporateNumber = formData.get('corporate_number') as string || '';
   const address = formData.get('address') as string;
   const phone = formData.get('phone') as string;
   const memo = formData.get('memo') as string;
@@ -29,7 +30,8 @@ export async function createPartner(formData: FormData) {
   try {
     const { error } = await supabase.from('partners').insert({
       name,
-      code,
+      partner_code: partnerCode,
+      corporate_number: corporateNumber,
       address,
       phone,
       memo,
@@ -51,7 +53,8 @@ export async function updatePartner(id: string, formData: FormData) {
   const supabase = await createClient();
 
   const name = formData.get('name') as string;
-  const code = formData.get('code') as string;
+  const partnerCode = formData.get('partner_code') as string;
+  const corporateNumber = formData.get('corporate_number') as string || '';
   const address = formData.get('address') as string || ''; // null対策
   const phone = formData.get('phone') as string || '';
   const memo = formData.get('memo') as string || '';
@@ -62,7 +65,8 @@ export async function updatePartner(id: string, formData: FormData) {
       .from('partners')
       .update({
         name,
-        code,
+        partner_code: partnerCode,
+        corporate_number: corporateNumber,
         address,
         phone,
         memo,

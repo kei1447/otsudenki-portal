@@ -355,6 +355,7 @@ export async function registerShipment(data: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { success: false, message: '要ログイン' };
+  if (!data.partnerId) return { success: false, message: '取引先を指定してください' };
 
   try {
     const { data: shipment, error: sErr } = await supabase
@@ -414,7 +415,8 @@ export async function registerShipment(data: {
     revalidatePath('/inventory');
     return { success: true, message: '出荷登録完了' };
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Unknown error';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const msg = e instanceof Error ? e.message : (typeof e === 'object' && e !== null && 'message' in e ? (e as any).message : JSON.stringify(e));
     return { success: false, message: '出荷エラー: ' + msg };
   }
 }
@@ -492,6 +494,8 @@ export async function registerDefectiveProcessing(data: {
           .single();
         unitPrice = price?.unit_price || 0;
       }
+
+      const lineTotal = unitPrice * quantity;
 
       const reason = processingType === 'return_billable' ? '有償返却(売上計上)' : '無償返却(0円出荷)';
       // JSTで今日の日付を取得 (UTCだと9時に日付が変わるため、日本時間の営業日とズレる)

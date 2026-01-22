@@ -780,10 +780,13 @@ function DefectiveTab({ products }: { products: DefectiveProduct[] }) {
     field: 'repair' | 'other',
     value: string
   ) => {
-    setInputs((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], [field]: value },
-    }));
+    setInputs((prev) => {
+      const current = prev[id] || { repair: '', other: '' };
+      return {
+        ...prev,
+        [id]: { ...current, [field]: value },
+      };
+    });
   };
 
   const handleProcess = async (

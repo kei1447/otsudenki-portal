@@ -493,9 +493,9 @@ export async function registerDefectiveProcessing(data: {
         unitPrice = price?.unit_price || 0;
       }
 
-      const lineTotal = unitPrice * quantity;
       const reason = processingType === 'return_billable' ? '有償返却(売上計上)' : '無償返却(0円出荷)';
-      const today = new Date().toISOString().split('T')[0];
+      // JSTで今日の日付を取得 (UTCだと9時に日付が変わるため、日本時間の営業日とズレる)
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
 
       let { data: shipment } = await supabase
         .from('shipments')

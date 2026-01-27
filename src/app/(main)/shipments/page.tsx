@@ -205,7 +205,7 @@ export default function ShipmentListPage() {
                         className="text-gray-600 hover:text-gray-900 p-1"
                         title="プレビュー"
                       >
-                        👁️
+                        📜
                       </button>
                       {/* 印刷 */}
                       <a

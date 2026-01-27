@@ -413,6 +413,26 @@ function ProductionTab({ products }: { products: ProductionProduct[] }) {
       <InventoryTable
         products={products}
         placeholder="製品名、品番、色で検索..."
+        columnCount={5}
+        customHeader={
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ width: '100px' }}>
+              品番
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ width: '180px' }}>
+              品名
+            </th>
+            <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ width: '80px' }}>
+              生地在庫
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ width: '180px' }}>
+              色・入荷日
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+              操作入力
+            </th>
+          </tr>
+        }
         renderRow={(p) => {
           const inp = inputs[p.id] || {};
           const isInputting =
@@ -430,26 +450,31 @@ function ProductionTab({ products }: { products: ProductionProduct[] }) {
               <td className="px-4 py-3 text-sm font-bold text-gray-800">
                 {p.name}
               </td>
+              {/* 生地在庫カラム（新規追加） */}
+              <td className="px-4 py-3 text-center">
+                <span className="inline-block px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-bold text-sm">
+                  {p.stock_raw?.toLocaleString() ?? 0}
+                </span>
+              </td>
+              {/* 色・入荷日選択 */}
               <td className="px-4 py-3 text-sm text-gray-500">
-                {p.color_text}
-                {/* 入荷情報の表示と選択 */}
+                <div className="text-sm">{p.color_text || '-'}</div>
+                {/* 入荷情報ドロップダウン */}
                 {p.arrivals && p.arrivals.length > 0 && (
-                  <div className="mt-1">
-                    <select
-                      className="text-xs border rounded p-1 bg-white text-gray-700 w-full max-w-[200px]"
-                      value={inp.sourceDate || ''}
-                      onChange={(e) =>
-                        handleChange(p.id, 'sourceDate', e.target.value)
-                      }
-                    >
-                      <option value="">(入荷日自動)</option>
-                      {p.arrivals.map((a, idx) => (
-                        <option key={idx} value={a.value}>
-                          {a.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <select
+                    className="mt-1 text-xs border rounded p-1 bg-white text-gray-700 w-full"
+                    value={inp.sourceDate || ''}
+                    onChange={(e) =>
+                      handleChange(p.id, 'sourceDate', e.target.value)
+                    }
+                  >
+                    <option value="">(入荷日自動)</option>
+                    {p.arrivals.map((a, idx) => (
+                      <option key={idx} value={a.value}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </td>
               <td className="px-4 py-3">

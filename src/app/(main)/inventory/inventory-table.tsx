@@ -13,12 +13,18 @@ type Props<T extends ProductBase> = {
     products: T[];
     renderRow: (product: T) => React.ReactNode;
     placeholder?: string;
+    /** カスタムヘッダー行（テーブル全体を独自定義する場合に使用） */
+    customHeader?: React.ReactNode;
+    /** カラム数（カスタムヘッダー使用時のcolSpan対応） */
+    columnCount?: number;
 };
 
 export default function InventoryTable<T extends ProductBase>({
     products,
     renderRow,
     placeholder = '品番・品名・色で検索...',
+    customHeader,
+    columnCount = 4,
 }: Props<T>) {
     const [searchTerm, setSearchTerm] = useState('');
     const [sortKey, setSortKey] = useState<'product_code' | 'name'>('product_code');
@@ -62,6 +68,32 @@ export default function InventoryTable<T extends ProductBase>({
         return <span className="text-blue-600 ml-1">{dir === 'asc' ? '▲' : '▼'}</span>;
     };
 
+    // デフォルトヘッダー（customHeaderがない場合）
+    const defaultHeader = (
+        <tr>
+            <th
+                className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('product_code')}
+                style={{ width: '120px' }}
+            >
+                品番 <Arrow active={sortKey === 'product_code'} dir={order} />
+            </th>
+            <th
+                className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('name')}
+                style={{ width: '200px' }}
+            >
+                品名 <Arrow active={sortKey === 'name'} dir={order} />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ width: '160px' }}>
+                色・仕様
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                操作入力
+            </th>
+        </tr>
+    );
+
     return (
         <div className="space-y-4">
             {/* 検索バー */}
@@ -82,34 +114,13 @@ export default function InventoryTable<T extends ProductBase>({
             <div className="overflow-x-auto border rounded-lg shadow-sm">
                 <table className="min-w-full divide-y divide-gray-200 bg-white">
                     <thead className="bg-gray-50">
-                        <tr>
-                            <th
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                                onClick={() => handleSort('product_code')}
-                                style={{ width: '120px' }}
-                            >
-                                品番 <Arrow active={sortKey === 'product_code'} dir={order} />
-                            </th>
-                            <th
-                                className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                                onClick={() => handleSort('name')}
-                                style={{ width: '200px' }}
-                            >
-                                品名 <Arrow active={sortKey === 'name'} dir={order} />
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider" style={{ width: '160px' }}>
-                                色・仕様
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                操作入力
-                            </th>
-                        </tr>
+                        {customHeader || defaultHeader}
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                         {sorted.map((item) => renderRow(item))}
                         {sorted.length === 0 && (
                             <tr>
-                                <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
+                                <td colSpan={columnCount} className="px-4 py-8 text-center text-gray-400">
                                     データが見つかりません
                                 </td>
                             </tr>
@@ -120,3 +131,4 @@ export default function InventoryTable<T extends ProductBase>({
         </div>
     );
 }
+

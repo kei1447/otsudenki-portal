@@ -122,8 +122,6 @@ export default function ShipmentListPage() {
                     {/* 印刷ボタン */}
                     <a
                       href={`/shipments/${shipment.id}/print`}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="text-blue-600 hover:text-blue-900 flex items-center gap-1"
                     >
                       <svg

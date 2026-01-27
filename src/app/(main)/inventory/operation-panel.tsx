@@ -889,7 +889,6 @@ function ShipmentTab({
                 <span>{new Date(h.shipment_date).toLocaleDateString()}</span>
                 <a
                   href={`/shipments/${h.id}/print`}
-                  target="_blank"
                   className="text-blue-600 hover:underline"
                 >
                   印刷

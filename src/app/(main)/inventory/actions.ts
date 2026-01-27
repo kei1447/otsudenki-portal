@@ -825,6 +825,45 @@ export async function getShipmentList() {
   return data || [];
 }
 
+// 納品書の備考を更新
+export async function updateShipmentRemarks(shipmentId: string, remarks: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, message: '要ログイン' };
+
+  const { error } = await supabase
+    .from('shipments')
+    .update({ remarks })
+    .eq('id', shipmentId);
+
+  if (error) return { success: false, message: 'エラー: ' + error.message };
+
+  revalidatePath('/shipments');
+  revalidatePath(`/shipments/${shipmentId}/print`);
+  return { success: true, message: '備考を保存しました' };
+}
+
+// 納品書詳細の取得 (プレビュー用)
+export async function getShipmentDetail(shipmentId: string) {
+  const supabase = await createClient();
+
+  const { data: shipment } = await supabase
+    .from('shipments')
+    .select(`*, partners ( name, address, phone )`)
+    .eq('id', shipmentId)
+    .single();
+
+  if (!shipment) return null;
+
+  const { data: items } = await supabase
+    .from('shipment_items')
+    .select(`*, products ( name, product_code, color_text )`)
+    .eq('shipment_id', shipmentId)
+    .order('id');
+
+  return { ...shipment, items: items || [] };
+}
+
 // 納品書の取り消し
 export async function deleteShipment(shipmentId: string) {
   const supabase = await createClient();

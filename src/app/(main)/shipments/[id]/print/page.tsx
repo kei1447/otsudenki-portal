@@ -147,9 +147,9 @@ export default async function PrintShipmentPage({
         </table>
 
         {/* 備考欄 */}
-        <div className="mt-8 border border-gray-400 rounded p-4 h-32">
+        <div className="mt-8 border border-gray-400 rounded p-4 min-h-[80px]">
           <p className="text-xs text-gray-500 mb-1">備考</p>
-          <p className="text-sm"></p>
+          <p className="text-sm whitespace-pre-wrap">{shipment.remarks || ''}</p>
         </div>
       </div>
     </div>

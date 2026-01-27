@@ -1018,12 +1018,18 @@ export async function getDashboardMetrics() {
   const todayCount = todayShipments?.length || 0;
   const todayAmount = todayShipments?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
 
-  // 2. 今月の出荷売上 (簡易集計)
+  // 2. 今月の出荷売上 (日付範囲で取得)
+  const monthStart = `${yyyyMm}-01`;
+  // 来月1日を算出 (月末+1日)
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthEnd = nextMonth.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+  
   const { data: monthShipments } = await supabase
     .from('shipments')
     .select('total_amount')
     .eq('status', 'confirmed')
-    .like('shipment_date', `${yyyyMm}%`);
+    .gte('shipment_date', monthStart)
+    .lt('shipment_date', monthEnd);
 
   const monthAmount = monthShipments?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
 

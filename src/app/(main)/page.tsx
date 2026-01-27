@@ -82,7 +82,7 @@ export default async function Home() {
                     <dt className="text-sm font-medium text-gray-500 truncate">システム状態</dt>
                     <dd>
                       <div className="text-lg font-bold text-green-600">正常稼働中</div>
-                      <div className="text-sm text-gray-500">最終更新: {new Date().toLocaleTimeString('ja-JP')}</div>
+                      <div className="text-sm text-gray-500">Version: 2026.01.27</div>
                     </dd>
                   </dl>
                 </div>

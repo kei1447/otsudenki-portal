@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/utils/supabase/server';
+import { createClient, getAuthUser } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 
 // 共通: 在庫がある製品のみ取得
@@ -224,9 +224,7 @@ export async function registerReceiving(data: {
   arrivalDate?: string;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthUser();
   if (!user) return { success: false, message: '要ログイン' };
 
   try {
@@ -274,9 +272,7 @@ export async function registerProduction(data: {
   sourceDate?: string;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthUser();
   if (!user) return { success: false, message: '要ログイン' };
 
   try {
@@ -371,9 +367,7 @@ export async function registerShipment(data: {
   reason?: string;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthUser();
   if (!user) return { success: false, message: '要ログイン' };
   if (data.items.length === 0) return { success: false, message: '出荷アイテムがありません' };
 
@@ -552,9 +546,7 @@ export async function registerDefectiveProcessing(data: {
   processingType: 'repair' | 'dispose';
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthUser();
   if (!user) return { success: false, message: '要ログイン' };
 
   try {
@@ -828,7 +820,7 @@ export async function getShipmentList() {
 // 納品書の備考を更新
 export async function updateShipmentRemarks(shipmentId: string, remarks: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuthUser();
   if (!user) return { success: false, message: '要ログイン' };
 
   const { error } = await supabase
@@ -867,9 +859,7 @@ export async function getShipmentDetail(shipmentId: string) {
 // 納品書の取り消し
 export async function deleteShipment(shipmentId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthUser();
   if (!user) return { success: false, message: '要ログイン' };
   const { data: shipment } = await supabase
     .from('shipments')
@@ -984,9 +974,7 @@ export async function createSingleInvoice(
   totalExclTax: number
 ) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthUser();
   if (!user) return { success: false, message: '要ログイン' };
   try {
     const subtotal = totalExclTax;
@@ -1209,9 +1197,7 @@ export async function adjustInventory(
   reason?: string
 ) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthUser();
   if (!user) return { success: false, message: '要ログイン' };
 
   try {

@@ -1,5 +1,5 @@
 import Sidebar from '@/components/Sidebar';
-import { createClient } from '@/utils/supabase/server';
+import { getAuthUser } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 
 export default async function MainLayout({
@@ -7,12 +7,8 @@ export default async function MainLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-
-  // ログインユーザー情報を取得
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // キャッシュ化されたgetAuthUserを使用（同一リクエスト内で重複呼び出しを防ぐ）
+  const { user } = await getAuthUser();
 
   // 万が一ログインしていない場合は弾く
   if (!user) {

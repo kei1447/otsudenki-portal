@@ -469,14 +469,18 @@ export async function registerShipment(data: {
         const lineTotal = unitPrice * item.quantity;
         addedAmount += lineTotal;
 
-        // 明細追加
-        await supabase.from('shipment_items').insert({
+        // 明細追加（不良返却の場合は理由も保存）
+        const itemData: Record<string, unknown> = {
           shipment_id: shipmentId,
           product_id: item.productId,
           quantity: item.quantity,
           unit_price: unitPrice,
           line_total: lineTotal,
-        });
+        };
+        if (shipmentType !== 'standard' && shipmentReason) {
+          itemData.defect_reason = shipmentReason;
+        }
+        await supabase.from('shipment_items').insert(itemData);
 
         // 在庫引き落とし & パンくず (Inventory Movement)
         if (shipmentType === 'standard') {
@@ -733,7 +737,7 @@ export async function getShipmentForPrint(shipmentId: string) {
   if (!shipment) return null;
   const { data: items } = await supabase
     .from('shipment_items')
-    .select(`*, products ( name, product_code, color_text, unit_weight )`)
+    .select(`*, products ( name, product_code, color_text, unit_weight ), defect_reason`)
     .eq('shipment_id', shipmentId)
     .order('products(product_code)');
 

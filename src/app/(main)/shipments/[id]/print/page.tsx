@@ -103,32 +103,14 @@ export default async function PrintShipmentPage({
                     if (!orderNum) return null;
                     return <div className="text-xs text-blue-600 mt-1">注文番号: {orderNum}</div>;
                   })()}
-                  {/* 不良返却の表示 logic */}
-                  {(() => {
-                    // @ts-ignore
-                    const defect = shipment.defectiveCounts?.[item.product_id];
-                    // @ts-ignore
-                    const reason = shipment.defectReasons?.[item.product_id];
-                    if (!defect) return null;
-
-                    if (item.unit_price > 0 && defect.billable > 0) {
-                      return (
-                        <div className="text-xs text-red-600 mt-1">
-                          ※内、不良返却: {defect.billable}個
-                          {reason && ` (${reason})`}
-                        </div>
-                      );
-                    }
-                    if (item.unit_price === 0 && defect.free > 0) {
-                      return (
-                        <div className="text-xs text-red-600 mt-1">
-                          ※不良返却
-                          {reason && ` (${reason})`}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
+                  {/* 不良返却の表示: 無償返却品（unit_price === 0）の場合のみ事由を表示 */}
+                  {item.unit_price === 0 && (
+                    <div className="text-xs text-red-600 mt-1">
+                      ※不良返却
+                      {/* @ts-ignore */}
+                      {item.defect_reason && ` (${item.defect_reason})`}
+                    </div>
+                  )}
                 </td>
                 <td className="py-3 px-2 text-right">
                   {item.quantity.toLocaleString()}

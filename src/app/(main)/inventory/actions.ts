@@ -222,6 +222,7 @@ export async function registerReceiving(data: {
   quantity: number;
   dueDate: string;
   arrivalDate?: string;
+  orderNumber?: string;
 }) {
   const supabase = await createClient();
   const { user } = await getAuthUser();
@@ -234,13 +235,7 @@ export async function registerReceiving(data: {
       p_field: 'stock_raw',
     });
 
-    // arrivalDateがあれば時刻を含める（一日の終わりにするか、現在時刻にするかは要件次第だが、通常は日付指定なら00:00 or 12:00JST）
-    // SupabaseはTimestamptz. string 'YYYY-MM-DD' を渡すと UTC 00:00 になる可能性がある。
-    // User expects JST.
-    // However, simpler is to just pass the string if it's YYYY-MM-DD, DB might interpret it.
-    // Better to append time if we want to be safe, but existing code uses `created_at` default.
-    // Let's assume input is YYYY-MM-DD.
-
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const insertData: any = {
       product_id: data.productId,
       movement_type: 'receiving',
@@ -251,6 +246,10 @@ export async function registerReceiving(data: {
 
     if (data.arrivalDate) {
       insertData.created_at = data.arrivalDate; // YYYY-MM-DD input, Postgres tolerates it
+    }
+
+    if (data.orderNumber) {
+      insertData.order_number = data.orderNumber;
     }
 
     await supabase.from('inventory_movements').insert(insertData);
@@ -738,12 +737,9 @@ export async function getShipmentForPrint(shipmentId: string) {
     .eq('shipment_id', shipmentId)
     .order('products(product_code)');
 
-  if (!items) return { ...shipment, items: [], defectiveCounts: {} };
+  if (!items) return { ...shipment, items: [], defectiveCounts: {}, orderNumbers: {}, defectReasons: {} };
 
   // 不良返却の内訳を取得
-  // shipment_date (YYYY-MM-DD) と一致する inventory_movements を探す
-  // JSTでの日付一致が必要だが、とりあえずUTC日付範囲で検索して JS側でフィルタリングする
-
   const productIds = items.map(i => i.product_id);
   const targetDateStr = shipment.shipment_date; // YYYY-MM-DD
 
@@ -751,45 +747,63 @@ export async function getShipmentForPrint(shipmentId: string) {
   const start = new Date(`${targetDateStr}T00:00:00+09:00`);
   const end = new Date(`${targetDateStr}T23:59:59.999+09:00`);
 
+  // 不良返却と理由を取得
   const { data: movements } = await supabase
     .from('inventory_movements')
-    .select('product_id, movement_type, quantity_change, created_at')
+    .select('product_id, movement_type, quantity_change, created_at, defect_reason')
     .in('product_id', productIds)
     .in('movement_type', ['return_billable', 'return_free'])
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString());
 
   const defectiveCounts: Record<number, { billable: number; free: number }> = {};
+  const defectReasons: Record<number, string> = {};
 
   if (movements) {
     movements.forEach(m => {
-      // movement_type は 'return_billable' | 'return_free'
       if (!defectiveCounts[m.product_id]) {
         defectiveCounts[m.product_id] = { billable: 0, free: 0 };
       }
-      // quantity_changeは負の値(在庫減) OR 正? 
-      // registerDefectiveProcessing では:
-      // return_billable/free -> Stock decreases? OR increases?
-      // "Defective Return" usually means Customer sends back to Us. So Stock Increases?
-      // Wait. `registerDefectiveProcessing`:
-      // `quantity` is passed.
-      // `increment_stock` p_amount: quantity (for defective/finished?)
-      // Wait. If it's a RETURN TO FACTORY (We send back), stock decr.
-      // Defective Processing:
-      // 'repair' -> Raw decr, Defective incr.
-      // 'return_billable' -> Stock?
-      // Let's check `registerDefectiveProcessing` implementation inside `actions.ts`.
 
-      const qty = Math.abs(m.quantity_change); // use absolute just in case
+      const qty = Math.abs(m.quantity_change);
       if (m.movement_type === 'return_billable') {
         defectiveCounts[m.product_id].billable += qty;
       } else if (m.movement_type === 'return_free') {
         defectiveCounts[m.product_id].free += qty;
       }
+
+      // 不良理由を保存（最初のもの、または複数あれば結合）
+      if (m.defect_reason) {
+        if (defectReasons[m.product_id]) {
+          defectReasons[m.product_id] += ', ' + m.defect_reason;
+        } else {
+          defectReasons[m.product_id] = m.defect_reason;
+        }
+      }
     });
   }
 
-  return { ...shipment, items: items || [], defectiveCounts };
+  // 注文番号を取得（受入時に登録したorder_number）
+  // 各製品の直近の受入履歴から注文番号を取得
+  const { data: receivingMovements } = await supabase
+    .from('inventory_movements')
+    .select('product_id, order_number')
+    .in('product_id', productIds)
+    .eq('movement_type', 'receiving')
+    .not('order_number', 'is', null)
+    .order('created_at', { ascending: false });
+
+  const orderNumbers: Record<number, string> = {};
+  if (receivingMovements) {
+    receivingMovements.forEach(m => {
+      // 最初に見つかったもの（最新）のみ保存
+      if (!orderNumbers[m.product_id] && m.order_number) {
+        orderNumbers[m.product_id] = m.order_number;
+      }
+    });
+  }
+
+  return { ...shipment, items: items || [], defectiveCounts, orderNumbers, defectReasons };
 }
 
 // 直近の出荷履歴を取得 (出荷画面表示用)

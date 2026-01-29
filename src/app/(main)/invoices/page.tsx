@@ -82,7 +82,13 @@ export default function InvoiceListPage() {
                       ¥ {inv.total_amount.toLocaleString()}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className="text-xs text-gray-400">PDF準備中</span>
+                      <Link
+                        href={`/invoices/${inv.id}/print`}
+                        className="text-blue-600 hover:text-blue-900 text-lg"
+                        title="印刷"
+                      >
+                        🖨️
+                      </Link>
                     </td>
                   </tr>
                 );

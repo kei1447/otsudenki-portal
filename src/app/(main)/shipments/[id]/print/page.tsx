@@ -15,8 +15,6 @@ export default async function PrintShipmentPage({
   if (!shipment) return notFound();
 
   const subTotal = shipment.total_amount;
-  const tax = Math.floor(subTotal * 0.1); // 消費税10%
-  const total = subTotal + tax;
 
   return (
     <div className="bg-white min-h-screen text-black p-8 md:p-12 print:p-0 print:text-sm">
@@ -25,9 +23,20 @@ export default async function PrintShipmentPage({
 
       {/* 納品書レイアウト (A4縦) */}
       <div className="max-w-[210mm] mx-auto border border-gray-200 p-8 print:border-none print:p-0">
-        {/* ヘッダー */}
-        <div className="flex justify-between items-end border-b-2 border-gray-800 pb-4 mb-8">
+        {/* ヘッダー: 相手先左上、タイトル中央、当社右側 */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          {/* 左: 相手先情報 */}
           <div>
+            <h2 className="text-xl font-bold mb-1 border-b-2 border-black pb-1">
+              {shipment.partners?.name} 御中
+            </h2>
+            <p className="text-sm text-gray-500 mt-2">
+              下記の通り納品いたしました。
+            </p>
+          </div>
+
+          {/* 中央: タイトル */}
+          <div className="text-center">
             <h1 className="text-3xl font-serif font-bold mb-2">納 品 書</h1>
             <p className="text-sm text-gray-600">
               No.{' '}
@@ -38,47 +47,28 @@ export default async function PrintShipmentPage({
               発行日: {new Date().toLocaleDateString('ja-JP')}
             </p>
           </div>
-          <div className="text-right">
-            <h2 className="text-xl font-bold mb-1">
-              {shipment.partners?.name} 御中
-            </h2>
-            <p className="text-sm text-gray-500">
-              下記の通り納品いたしました。
-            </p>
-          </div>
-        </div>
 
-        {/* 自社情報 & 合計金額 */}
-        <div className="flex justify-between mb-8">
-          <div className="w-1/2">
-            <div className="border-b border-gray-400 mb-2 pb-1">
-              <span className="text-sm text-gray-500">納品日</span>
-              <span className="ml-4 font-bold text-lg">
-                {new Date(shipment.shipment_date).toLocaleDateString('ja-JP')}
-              </span>
-            </div>
-            <div className="mt-4">
-              <div className="flex justify-between border-b border-gray-300 py-1">
-                <span>税抜合計</span>
-                <span>¥ {subTotal.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-300 py-1">
-                <span>消費税 (10%)</span>
-                <span>¥ {tax.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between border-b-2 border-black py-1 mt-1 font-bold text-xl">
-                <span>ご請求金額</span>
-                <span>¥ {total.toLocaleString()}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="w-1/3 text-sm text-right leading-relaxed">
+          {/* 右: 当社情報 */}
+          <div className="text-sm text-right leading-relaxed">
             <p className="font-bold text-lg mb-1">大津電機工業株式会社</p>
             <p>〒520-0000</p>
             <p>滋賀県大津市〇〇町1-1-1</p>
             <p>TEL: 077-000-0000</p>
             <p>担当: {shipment.created_by?.email || '営業部'}</p>
+          </div>
+        </div>
+
+        {/* 納品日と合計金額 */}
+        <div className="flex justify-between items-center mb-6 border-t border-b border-gray-400 py-3">
+          <div>
+            <span className="text-sm text-gray-500">納品日</span>
+            <span className="ml-4 font-bold text-lg">
+              {new Date(shipment.shipment_date).toLocaleDateString('ja-JP')}
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="text-sm text-gray-500 mr-4">合計金額（税抜）</span>
+            <span className="font-bold text-2xl">¥ {subTotal.toLocaleString()}</span>
           </div>
         </div>
 
@@ -103,19 +93,39 @@ export default async function PrintShipmentPage({
                     {item.products?.name}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {item.products?.product_code} {item.products?.color_text}
+                    {item.products?.product_code}
+                    {item.products?.color_text && ` / ${item.products?.color_text}`}
                   </div>
+                  {/* 注文番号表示 */}
+                  {(() => {
+                    // @ts-ignore
+                    const orderNum = shipment.orderNumbers?.[item.product_id];
+                    if (!orderNum) return null;
+                    return <div className="text-xs text-blue-600 mt-1">注文番号: {orderNum}</div>;
+                  })()}
                   {/* 不良返却の表示 logic */}
                   {(() => {
                     // @ts-ignore
                     const defect = shipment.defectiveCounts?.[item.product_id];
+                    // @ts-ignore
+                    const reason = shipment.defectReasons?.[item.product_id];
                     if (!defect) return null;
 
                     if (item.unit_price > 0 && defect.billable > 0) {
-                      return <div className="text-xs text-red-600 mt-1">※内、不良返却: {defect.billable}個</div>;
+                      return (
+                        <div className="text-xs text-red-600 mt-1">
+                          ※内、不良返却: {defect.billable}個
+                          {reason && ` (${reason})`}
+                        </div>
+                      );
                     }
                     if (item.unit_price === 0 && defect.free > 0) {
-                      return <div className="text-xs text-red-600 mt-1">※不良返却</div>;
+                      return (
+                        <div className="text-xs text-red-600 mt-1">
+                          ※不良返却
+                          {reason && ` (${reason})`}
+                        </div>
+                      );
                     }
                     return null;
                   })()}

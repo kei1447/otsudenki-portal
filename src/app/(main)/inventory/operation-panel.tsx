@@ -111,10 +111,10 @@ export default function OperationPanel({
 // 1. 受入登録タブ
 // ============================================================================
 function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
-  const [inputs, setInputs] = useState<Record<number, { qty: string; date: string; dueDate?: string }>>({});
+  const [inputs, setInputs] = useState<Record<number, { qty: string; date: string; dueDate?: string; orderNumber?: string }>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleChange = (id: number, field: 'qty' | 'date' | 'dueDate', value: string) => {
+  const handleChange = (id: number, field: 'qty' | 'date' | 'dueDate' | 'orderNumber', value: string) => {
     setInputs((prev) => ({
       ...prev,
       [id]: {
@@ -134,6 +134,7 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
           quantity: parseInt(val.qty),
           dueDate: val.dueDate ? formatDateForDB(val.dueDate) : '',
           arrivalDate: val.date ? formatDateForDB(val.date) : '',
+          orderNumber: val.orderNumber || '',
         };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null && e.quantity > 0);
@@ -149,7 +150,8 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
     const productMap = new Map(products.map(p => [p.id, p]));
     const confirmMsg = entries.map(e => {
       const p = productMap.get(e.productId);
-      return `・${p?.name}: ${e.quantity}個 (入荷日: ${e.arrivalDate || '指定なし'}, 納期: ${e.dueDate || '指定なし'})`;
+      const orderPart = e.orderNumber ? ` (注文番号: ${e.orderNumber})` : '';
+      return `・${p?.name}: ${e.quantity}個${orderPart} (入荷日: ${e.arrivalDate || '指定なし'}, 納期: ${e.dueDate || '指定なし'})`;
     }).join('\n');
 
     if (!confirm(`以下を一括登録しますか？\n\n${confirmMsg}`)) return;
@@ -177,6 +179,30 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
     setInputs(newInputs);
     setIsSubmitting(false);
   };
+  // 一括日付入力
+  const [bulkArrivalDate, setBulkArrivalDate] = useState('');
+  const [bulkDueDate, setBulkDueDate] = useState('');
+
+  const applyBulkDates = () => {
+    // 入力済みの行のみに適用
+    const entriesWithQty = products.filter(p => inputs[p.id]?.qty);
+    if (entriesWithQty.length === 0) {
+      alert('先に数量を入力してください');
+      return;
+    }
+
+    const newInputs = { ...inputs };
+    entriesWithQty.forEach(p => {
+      if (bulkArrivalDate) {
+        newInputs[p.id] = { ...newInputs[p.id], date: bulkArrivalDate };
+      }
+      if (bulkDueDate) {
+        newInputs[p.id] = { ...newInputs[p.id], dueDate: bulkDueDate };
+      }
+    });
+    setInputs(newInputs);
+    alert(`${entriesWithQty.length}件に日付を適用しました`);
+  };
 
   return (
     <div className="space-y-4">
@@ -193,52 +219,107 @@ function ReceivingTab({ products }: { products: ReceivingProduct[] }) {
         </button>
       </div>
 
+      {/* 日付一括入力エリア */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-gray-600">日付一括入力:</span>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500">入荷日</label>
+            <input
+              type="text"
+              placeholder="YYYYMMDD"
+              className="w-28 border p-1.5 rounded text-sm font-mono"
+              value={bulkArrivalDate}
+              onChange={(e) => setBulkArrivalDate(e.target.value)}
+              maxLength={8}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500">納期</label>
+            <input
+              type="text"
+              placeholder="YYYYMMDD"
+              className="w-28 border p-1.5 rounded text-sm font-mono"
+              value={bulkDueDate}
+              onChange={(e) => setBulkDueDate(e.target.value)}
+              maxLength={8}
+            />
+          </div>
+          <button
+            onClick={applyBulkDates}
+            className="bg-yellow-400 text-yellow-900 px-4 py-1.5 rounded text-sm font-bold hover:bg-yellow-500 transition-colors"
+          >
+            数量入力済みの行に適用
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          ※ 先に各行の数量を入力してから「適用」をクリックしてください
+        </p>
+      </div>
+
       <InventoryTable
         products={products}
         placeholder="製品名、品番、色で検索..."
-        renderRow={(p) => (
+        tableId="receiving"
+        enableColumnSettings={true}
+        renderRow={(p, visibleColumns) => (
           <tr key={p.id} className={inputs[p.id]?.qty ? "bg-yellow-50" : "hover:bg-yellow-50"}>
-            <td className="px-4 py-3 text-sm font-mono text-gray-600">{p.product_code}</td>
-            <td className="px-4 py-3 text-sm font-bold text-gray-800">{p.name}</td>
-            <td className="px-4 py-3 text-sm text-gray-500">
-              {p.color_text}
-              <div className="text-xs text-gray-400 mt-1">
-                現在庫: <span className="font-bold">{p.stock_raw.toLocaleString()}</span>
-              </div>
-            </td>
-            <td className="px-4 py-3">
-              <div className="flex gap-2 items-center">
-                <input
-                  type="number"
-                  placeholder="数量"
-                  className="w-24 border p-1 rounded text-right font-bold focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                  value={inputs[p.id]?.qty || ''}
-                  onChange={(e) => handleChange(p.id, 'qty', e.target.value)}
-                />
-                <input
-                  type="text"
-                  placeholder="入荷日(YYYYMMDD)"
-                  className="w-32 border p-1 rounded text-xs text-gray-500 font-mono"
-                  value={inputs[p.id]?.date || ''}
-                  onChange={(e) => handleChange(p.id, 'date', e.target.value)}
-                  maxLength={8}
-                />
-                <input
-                  type="text"
-                  placeholder="納期(YYYYMMDD)"
-                  className="w-32 border p-1 rounded text-xs text-gray-500 font-mono"
-                  value={inputs[p.id]?.dueDate || ''}
-                  onChange={(e) => handleChange(p.id, 'dueDate', e.target.value)}
-                  maxLength={8}
-                />
-              </div>
-              {/* @ts-ignore */}
-              {p.arrivals && p.arrivals.length > 0 && (
+            {visibleColumns.includes('product_code') && (
+              <td className="px-4 py-3 text-sm font-mono text-gray-600">{p.product_code}</td>
+            )}
+            {visibleColumns.includes('name') && (
+              <td className="px-4 py-3 text-sm font-bold text-gray-800">{p.name}</td>
+            )}
+            {visibleColumns.includes('color_text') && (
+              <td className="px-4 py-3 text-sm text-gray-500">
+                {p.color_text}
                 <div className="text-xs text-gray-400 mt-1">
-                  直近: {p.arrivals[0].label}
+                  現在庫: <span className="font-bold">{p.stock_raw.toLocaleString()}</span>
                 </div>
-              )}
-            </td>
+              </td>
+            )}
+            {visibleColumns.includes('input') && (
+              <td className="px-4 py-3">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    placeholder="数量"
+                    className="w-24 border p-1 rounded text-right font-bold focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                    value={inputs[p.id]?.qty || ''}
+                    onChange={(e) => handleChange(p.id, 'qty', e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="入荷日(YYYYMMDD)"
+                    className="w-32 border p-1 rounded text-xs text-gray-500 font-mono"
+                    value={inputs[p.id]?.date || ''}
+                    onChange={(e) => handleChange(p.id, 'date', e.target.value)}
+                    maxLength={8}
+                  />
+                  <input
+                    type="text"
+                    placeholder="納期(YYYYMMDD)"
+                    className="w-32 border p-1 rounded text-xs text-gray-500 font-mono"
+                    value={inputs[p.id]?.dueDate || ''}
+                    onChange={(e) => handleChange(p.id, 'dueDate', e.target.value)}
+                    maxLength={8}
+                  />
+                  <input
+                    type="text"
+                    placeholder="注文番号"
+                    className="w-28 border p-1 rounded text-xs text-gray-600"
+                    value={inputs[p.id]?.orderNumber || ''}
+                    onChange={(e) => handleChange(p.id, 'orderNumber', e.target.value)}
+                  />
+                </div>
+                {/* @ts-ignore */}
+                {p.arrivals && p.arrivals.length > 0 && (
+                  <div className="text-xs text-gray-400 mt-1">
+                    直近: {p.arrivals[0].label}
+                  </div>
+                )}
+              </td>
+            )}
           </tr>
         )}
       />
@@ -693,6 +774,23 @@ function ShipmentTab({
 
     const formattedDate = formatDateForDB(date);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(formattedDate)) return alert('日付はYYYYMMDD形式(8桁)で入力してください');
+
+    // 在庫超過チェック
+    const overStockItems: string[] = [];
+    for (const item of items) {
+      const product = targetProducts.find((p) => p.id === item.productId);
+      if (product) {
+        const availableStock = shipmentMode === 'standard' ? product.stock_finished : product.stock_defective;
+        if (item.quantity > availableStock) {
+          overStockItems.push(`・${product.name}: 出荷数${item.quantity} > 在庫${availableStock}`);
+        }
+      }
+    }
+
+    if (overStockItems.length > 0) {
+      alert(`【在庫不足エラー】\n以下の製品は在庫数を超えています:\n\n${overStockItems.join('\n')}\n\n出荷数を修正してください。`);
+      return;
+    }
 
     // Unit Price handling:
     // For standard, we fetch price in action? Use 0 here and let action handle it?

@@ -780,7 +780,10 @@ function ShipmentTab({
     for (const item of items) {
       const product = targetProducts.find((p) => p.id === item.productId);
       if (product) {
-        const availableStock = shipmentMode === 'standard' ? product.stock_finished : product.stock_defective;
+        // 型ガード: shipmentModeに応じて適切なプロパティにアクセス
+        const availableStock = shipmentMode === 'standard'
+          ? ('stock_finished' in product ? product.stock_finished : 0)
+          : ('stock_defective' in product ? product.stock_defective : 0);
         if (item.quantity > availableStock) {
           overStockItems.push(`・${product.name}: 出荷数${item.quantity} > 在庫${availableStock}`);
         }

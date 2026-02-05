@@ -1,0 +1,18 @@
+
+> otsudenki-portal@0.1.0 dev
+> next dev
+
+▲ Next.js 16.1.1 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.10:3000
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 5.1s
+○ Compiling /login ...
+ GET /login 200 in 5.0s (compile: 4.5s, proxy.ts: 5ms, render: 462ms)
+ GET / 200 in 1809ms (compile: 359ms, proxy.ts: 89ms, render: 1360ms)
+ POST /login 303 in 3.0s (compile: 25ms, proxy.ts: 33ms, render: 3.0s)
+ GET /products 200 in 2.1s (compile: 296ms, proxy.ts: 75ms, render: 1732ms)
+ GET /prices 200 in 4.3s (compile: 632ms, proxy.ts: 118ms, render: 3.5s)
+[?25h
